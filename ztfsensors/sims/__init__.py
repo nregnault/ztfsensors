@@ -50,7 +50,8 @@ class Line:
         # self.distorted_data = None
         self.reset()
         if stars:
-            self.add_stars(self.stars)
+            psf = GaussianPSF1D()
+            self.add_stars(self.stars, psf)
         if noise:
             self.add_noise()
 
@@ -168,7 +169,8 @@ class Image:
     def add_noise(self):
         self.distorted_data = None
         self.true_data = self.orig_data + \
-            np.random.normal(loc=0., scale=np.sqrt(self.orig_data), size=self.orig_data.shape)
+            np.random.normal(loc=0., scale=np.sqrt(self.orig_data),
+                             size=self.orig_data.shape)
         return self
 
     def gen_stars(self, n):
@@ -176,8 +178,8 @@ class Image:
         x = np.random.uniform(0, nx, n)
         y = np.random.uniform(0, ny, n)
         flux = np.random.uniform(0, 100000., n)
-        l = np.rec.fromarrays((x, y, flux), names=['x', 'y', 'flux'])
-        return l
+        stars = np.rec.fromarrays((x, y, flux), names=['x', 'y', 'flux'])
+        return stars
 
     def distort(self, model):
         if not hasattr(self, 'true_data') or self.true_data is None:
@@ -186,16 +188,15 @@ class Image:
         return self
 
     def plot(self, vmin=-100., vmax=100.):
-        fig, axes = pl.subplots(nrows=1, ncols=2, figsize=(12,8),
-                                sharex=True, sharey=True)
+        _, axes = pl.subplots(nrows=1, ncols=2, figsize=(12, 8),
+                              sharex=True, sharey=True)
         axes[0].imshow(self.true_data)
         axes[0].set_xlabel('x [pixels]')
         axes[0].set_ylabel('y [pixels]')
         if self.distorted_data is not None:
-            axes[1].imshow(self.distorted_data - self.true_data, vmin=vmin, vmax=vmax)
+            axes[1].imshow(self.distorted_data - self.true_data,
+                           vmin=vmin, vmax=vmax)
             axes[1].set_xlabel('x [pixels]')
-
-
 
 
 # def line(size=1000, skylev=100, flux=1000, x_star=500.2, sigma=4., noise=True, plot=False):

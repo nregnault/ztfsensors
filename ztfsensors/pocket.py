@@ -3,15 +3,16 @@
 import time
 
 import numpy as np
+from pandas.core.arrays.period import delta_to_tick
 import pylab as pl
 from scipy import sparse
 from sksparse import cholmod
 
-import _pocket
+from ._pocket import PocketModel
 
 
-def deriv(model, pix, step=0.01):
-    """model derivatives
+def pocket_model_derivatives(model, pix, step=0.01):
+    """model derivatives w.r.t the pixel values
     """
     N = len(pix)
     J = np.zeros((N, N))
@@ -22,6 +23,79 @@ def deriv(model, pix, step=0.01):
         J[i] = (vv-v0)/step
         pix[i] -= step
     return J
+
+def correct_1d(model, pix, step=0.01):
+    """Fit the undistorted pixel values (1D version)
+    """
+    default_pix_val = np.median(pix)
+
+    J = pocket_model_derivatives(model, pix) # was 'sky'
+    i,j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
+    v = J[i.flatten(), j.flatten()]
+    idx = np.abs(v)>1.E-5
+    i,j = i.flatten(), j.flatten()
+    JJ = sparse.coo_matrix((v[idx], (i[idx], j[idx])), shape=J.shape)
+    H = JJ.T @ JJ
+    f = cholmod.cholesky(H) # , ordering_method='metis')
+
+    current_state = pix.copy()
+    current_state[-30:] = 0.
+    current_state[0:3] = default_pix_val
+    delta_tot = np.zeros_like(current_state)
+    start = time.perf_counter()
+    mask = np.zeros_like(current_state).astype(int)
+
+    for i in range(4):
+        res = pix - model.apply(current_state)
+        delta = f.solve_LDLt(JJ.T @ res)
+        delta_tot += delta
+        current_state += delta
+        current_state[-30:] = 0.
+        current_state[:2] = default_pix_val
+        mask[current_state<0] = 1
+        current_state[current_state<0] = default_pix_val
+    stop = time.perf_counter()
+    print(f'time: {stop-start}')
+
+    return current_state, delta_tot, mask
+
+def correct_2d(model, pix, step=0.01):
+    """
+    """
+    default_pix_val = np.median(pix)
+
+    line_prof = np.full(pix.shape[0], default_pix_val)
+    print(line_prof)
+    J = pocket_model_derivatives(model, line_prof) # was 'sky'
+    i,j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
+    v = J[i.flatten(), j.flatten()]
+    idx = np.abs(v)>1.E-5
+    i,j = i.flatten(), j.flatten()
+    JJ = sparse.coo_matrix((v[idx], (i[idx], j[idx])), shape=J.shape)
+    H = JJ.T @ JJ
+    f = cholmod.cholesky(H, ordering_method='best')
+
+    current_state = pix.copy()
+    current_state[:,-30:] = 0.
+    current_state[0:2] = default_pix_val
+    delta_tot = np.zeros_like(current_state)
+    mask = np.zeros_like(current_state).astype(int)
+    start = time.perf_counter()
+    for i in range(4):
+        res = pix - model.apply(current_state)
+        delta = f.solve_LDLt(JJ.T @ res)
+        # delta = f(JJ.T @ res)
+        delta_tot += delta
+        current_state += delta
+        current_state[:,-30:] = 0.
+        mask[current_state<0] = 1
+        # current_state[:,:3] = default_pix_val
+        current_state[current_state<0.] = default_pix_val
+    stop = time.perf_counter()
+    print(f'time: {stop-start}')
+
+    return current_state, delta_tot, mask
+
 
 
 def fit(model, pix, step=0.01):
