@@ -89,22 +89,37 @@ class Line:
         self.distorted_data = model.apply(self.true_data)
         return self
 
-    def plot(self):
-        fig, axes = pl.subplots(nrows=2, ncols=1, sharex=True, figsize=(12,12))
-        axes[0].plot(self.orig_data, 'k-', label='orig data')
+    def plot(self, reco=None):
+        if reco is not None:
+            fig, axes = pl.subplots(nrows=3, ncols=1, sharex=True, figsize=(12,12))
+        else:
+            fig, axes = pl.subplots(nrows=2, ncols=1, sharex=True, figsize=(12,12))
+
+        axes[0].plot(self.orig_data, 'k:', label='orig data')
         if self.true_data is not None:
             axes[0].plot(self.true_data, 'k.', label='orig + noise (truth)')
         if self.distorted_data is not None:
             axes[0].plot(self.distorted_data, 'r-.', label='distorted')
+        if reco is not None:
+            axes[0].plot(reco + self.distorted_data, 'b.', label='reconstructed')
         axes[0].set_ylabel('flux')
         axes[0].legend(loc='best')
 
         if self.distorted_data is not None:
-            axes[1].plot(self.distorted_data - self.true_data, 'b.')
+            axes[1].plot(self.distorted_data - self.true_data, 'r.', label='distortion')
+        if reco is not None:
+            axes[1].plot(reco, 'b.', label='correction')
+        axes[1].legend(loc='best')
         axes[1].set_ylabel('distorted - true')
         axes[1].set_xlabel('x')
-        pl.subplots_adjust(hspace=0.005)
 
+        if reco is not None:
+            axes[2].plot(reco + self.distorted_data - self.true_data, 'b.')
+            axes[2].set_xlabel('x')
+            axes[2].set_ylabel('sum')
+            axes[2].set_ylim((-100,100))
+
+        pl.subplots_adjust(hspace=0.005)
 
 class GaussianPSF2D:
 
