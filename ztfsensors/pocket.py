@@ -32,7 +32,7 @@ def correct_1d(model, pix, step=0.01):
     J = pocket_model_derivatives(model, pix) # was 'sky'
     i,j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
     v = J[i.flatten(), j.flatten()]
-    idx = np.abs(v)>1.E-5
+    idx = np.abs(v)>1.E-4 # was 1.E-5
     i,j = i.flatten(), j.flatten()
     JJ = sparse.coo_matrix((v[idx], (i[idx], j[idx])), shape=J.shape)
     H = JJ.T @ JJ
@@ -45,13 +45,14 @@ def correct_1d(model, pix, step=0.01):
     start = time.perf_counter()
     mask = np.zeros_like(current_state).astype(int)
 
-    for i in range(4):
+    for i in range(5):
         res = pix - model.apply(current_state)
         delta = f.solve_LDLt(JJ.T @ res)
         delta_tot += delta
         current_state += delta
         current_state[-30:] = 0.
-        current_state[:2] = default_pix_val
+        if i == 0:
+            current_state[:2] = default_pix_val
         mask[current_state<0] = 1
         current_state[current_state<0] = default_pix_val
     stop = time.perf_counter()

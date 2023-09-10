@@ -1,3 +1,4 @@
+// #include <assert>
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -28,8 +29,14 @@ public:
     // We model it as a power function of the pocket charge.
     double _flush(double q_i) const
     {
-        double x = q_i / _cmax;
-        return _cmax * pow(x, _alpha);
+      if(q_i <= 0.)
+	{
+	  //	  assert(q_i >= 0.);
+	  q_i = 0.;
+	  return 0.;
+	}
+      double x = q_i / _cmax;
+      return _cmax * pow(x, _alpha);
     }
 
     // transfer of electrons from the pixel to the pocket.
@@ -41,6 +48,8 @@ public:
     {
         double x = q_i / _cmax;
         double y = n_i / _nmax;
+	if(y<0.)
+	  return 0.;
         return _cmax * pow(1.-x, _alpha) * pow(y, _beta);
     }
 

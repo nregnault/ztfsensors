@@ -20,10 +20,11 @@ def test_2d_pocket_corr(shape=(1000,1000), skylev=322.):
 
     fig, axes = pl.subplots(nrows=1, ncols=2, figsize=(12, 8),
                             sharex=True, sharey=True)
-    axes[0].imshow(cs-im.true_data, vmin=-0.1, vmax=0.1)
+    im = axes[0].imshow(cs-im.true_data, vmin=-0.1, vmax=0.1)
     axes[0].set_xlabel('x [pixels]')
     axes[0].set_ylabel('y [pixels]')
     axes[0].set_title('reco - truth')
+    # fig.colorbar(im)
     axes[1].imshow(delta, vmin=-20, vmax=20.)
     axes[1].set_xlabel('x [pixels]')
     axes[1].set_title('correction')

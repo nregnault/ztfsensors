@@ -208,10 +208,12 @@ class Image:
         axes[0].imshow(self.true_data)
         axes[0].set_xlabel('x [pixels]')
         axes[0].set_ylabel('y [pixels]')
+        axes[0].set_title('true data (no distortion)')
         if self.distorted_data is not None:
             axes[1].imshow(self.distorted_data - self.true_data,
                            vmin=vmin, vmax=vmax)
             axes[1].set_xlabel('x [pixels]')
+        axes[1].set_title('true - distorted')
 
 
 # def line(size=1000, skylev=100, flux=1000, x_star=500.2, sigma=4., noise=True, plot=False):
