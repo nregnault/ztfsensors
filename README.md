@@ -1,14 +1,24 @@
 ZTF sensors
 ===========
 
-Code to characterize, model and correct the main effects observed on the ZTF sensors:
-  - linearity
-  - brighter-fatter effect
-  - *pocket effect*, a.k.a. *ccd 6 effect* 
-
+Code to characterize, model and correct the main effects observed on the ZTF
+sensors. As of today, we have a tentative correction of the pocket effect (aka
+MegaTrap effect, aka CCD6 effect).
 
 Installation
 ------------
+
+It is recommended to setup a `conda` environment:
+
+``` bash
+conda create -n sensors
+conda activate sensors
+
+# using mamba instead of conda is much faster
+mamba install numpy scipy matplotlib scikit-sparse pybind11 ipython pandas
+```
+
+Now, you can install ztfsensors:
 
 ```bash
 # clone this repo 
@@ -22,12 +32,13 @@ or, if you intend to hack the code:
 pip install -e . 
 ```
 
-Building the documentation
---------------------------
 
-```bash
-cd zfsensors/docs
-make html
+<!-- Building the documentation -->
+<!-- -------------------------- -->
+
+<!-- ```bash -->
+<!-- cd zfsensors/docs -->
+<!-- make html -->
 ```
 
 
