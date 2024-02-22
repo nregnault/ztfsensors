@@ -5,6 +5,7 @@ Simulation of a test data sample
 """
 import logging
 
+from ruamel.yaml import YAML
 import emcee
 import numba
 import numpy as np
@@ -532,13 +533,18 @@ class FillModel:
 def fit(ccdid=6, qid=1, plot=False, plot_exp_index=None):
     """
     """
+    logging.info(f'loading data for ccdid={ccdid},qid={qid}')
     dp = load(ccdid=ccdid, qid=qid)
+    logging.info(f'instantiating overscan model')
     m = OverscanModelNoDeltaMax(dp)
     # m.pars.fix('n0')
     # m.pars.fix('beta')
+    logging.info(f'least squares')
     fit_res = least_squares(m, m.pars.free, method='lm')
 
+    logging.info('Fill Model...')
     fm = FillModel(m)
+    logging.info('least squares...')
     fill_model_fit_res = least_squares(fm, fm.pars.free, method='lm') # , method='lm')
     print(fill_model_fit_res)
     m.pars['n0'].full[:] = fm.pars['n0'].full[:]
@@ -623,7 +629,7 @@ def fit(ccdid=6, qid=1, plot=False, plot_exp_index=None):
 
     return m, fm
 
-def fitall(plot=True):
+def fitall(plot=True, saveas=None):
     res = []
     for ccdid in range(1,17):
         for qid in range(1,5):
@@ -632,8 +638,8 @@ def fitall(plot=True):
             res.append(m)
 
     if plot:
-        alpha = np.array([r.pars['alpha'].full[0] for r in res])
-        cmax  = np.array([r.pars['cmax'].full[0] for r in res])
+        alpha = np.array([r[0].pars['alpha'].full[0] for r in res])
+        cmax  = np.array([r[0].pars['cmax'].full[0] for r in res])
         ccd = np.arange(1,17).repeat(4)
         qid = np.tile([1, 2, 3, 4], 16)
         fig, ax= pl.subplots(nrows=2, ncols=1, sharex=True)
@@ -644,7 +650,27 @@ def fitall(plot=True):
         ax[1].set_ylabel('$c_{max}$')
         ax[1].set_xlabel('CCD')
         fig.subplots_adjust(hspace=0.025)
-    return res
+
+    if isinstance(saveas, str):
+        c = 0
+        to_save = {'title': 'default model (v0.1)'}
+        to_save['data'] = []
+        for ccdid in range(1,17):
+            for qid in range(1,5):
+                model = res[c][0]
+                pars = {'ccdid': int(ccdid),
+                        'qid': int(qid),
+                        'pars': {'alpha': float(model.pars['alpha'].full[0]),
+                                 'cmax': float(model.pars['cmax'].full[0]),
+                                 'beta': float(model.pars['beta'].full[0]),
+                                 'nmax': float(model.pars['n0'].full[0])}}
+                to_save['data'].append(pars)
+                c += 1
+        with open(saveas, 'w') as f:
+            yaml = YAML()
+            yaml.dump(to_save, stream=f)
+
+    return res, to_save
 
 
 class LogProb:
