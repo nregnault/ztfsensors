@@ -30,11 +30,11 @@ public:
     double _flush(double q_i) const
     {
       if(q_i <= 0.)
-	{
-	  //	  assert(q_i >= 0.);
-	  q_i = 0.;
-	  return 0.;
-	}
+          {
+              //	  assert(q_i >= 0.);
+              q_i = 0.;
+              return 0.;
+          }
       double x = q_i / _cmax;
       return _cmax * pow(x, _alpha);
     }
@@ -48,8 +48,8 @@ public:
     {
         double x = q_i / _cmax;
         double y = n_i / _nmax;
-	if(y<0.)
-	  return 0.;
+        if(y<0.)
+            return 0.;
         return _cmax * pow(1.-x, _alpha) * pow(y, _beta);
     }
 
