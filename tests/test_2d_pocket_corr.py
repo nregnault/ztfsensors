@@ -31,5 +31,5 @@ def test_2d_pocket_corr(shape=(1000,1000), skylev=322.):
     fig.suptitle('2D correction')
 
     print(cs)
-
+    pl.show()
     return cs, delta

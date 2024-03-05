@@ -21,6 +21,7 @@ def test_1d_pocket_corr(size=250, noise=True):
     line.plot(reco=delta)
 
     line.plot()
+    pl.show()
     # plot the correction
 
     # line.plot()
