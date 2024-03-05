@@ -1,9 +1,15 @@
 from ruamel.yaml import YAML
+import os
+import os.path
 
 def get_coef_model(idx_ccd, idx_quad, mjd,f_cor="pocket_corrections.yaml"):
     """
     alpha, cmax, beta, nmax = get_coef_model(idx_ccd, idx_quad, mjd)
     """
+    print(os.getcwd())
+    if f_cor.find('/') < 0:
+        f_cor = os.path.dirname(__file__)+"/"+f_cor
+    print(f_cor)
     data = open(f_cor)
     coefs = data.read()
     data.close()
