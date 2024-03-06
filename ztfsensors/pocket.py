@@ -8,7 +8,7 @@ import numpy as np
 from pandas.core.arrays.period import delta_to_tick
 import pylab as pl
 from scipy import sparse
-from sksparse import cholmod
+# from sksparse import cholmod
 
 from ruamel.yaml import YAML
 
@@ -41,7 +41,7 @@ class PocketModel:
         number of electrons transfered from pocket : array-like of floats
         """
         x = q_j / self.cmax
-        from_pocket = np.clip(self.cmax * np.pow(x, self.alpha), 0., q_j)
+        from_pocket = np.clip(self.cmax * np.power(x, self.alpha), 0., q_j)
         return from_pocket
 
     def _fill(self, q_j, n_j):
@@ -57,8 +57,9 @@ class PocketModel:
         """
         x = q_j / self.cmax
         y = n_j / self.nmax
-        to_pocket = np.clip(self.cmax * np.pow(1.-x, self.alpha) * np.pow(y, self.beta),
+        to_pocket = np.clip(self.cmax * np.power(1.-x, self.alpha) * np.power(y, self.beta),
                             0.,  n_j)
+        return to_pocket
 
     def apply(self, pix):
         """apply the model to 2D image
