@@ -2,6 +2,7 @@
 
 import time
 import logging
+from importlib.resources import files
 
 import numpy as np
 from pandas.core.arrays.period import delta_to_tick
@@ -9,7 +10,86 @@ import pylab as pl
 from scipy import sparse
 from sksparse import cholmod
 
-from ._pocket import PocketModel
+from ruamel.yaml import YAML
+
+# this is the C++ version
+from ._pocket import _PocketModel
+
+
+
+class PocketModel:
+    """A pure numpy version of the pocket effect model
+    """
+    def __init__(self, alpha, cmax, beta, nmax):
+        """constructor - a set of
+        """
+        self.alpha = alpha
+        self.cmax = cmax
+        self.beta = beta
+        self.nmax = nmax
+
+    def _flush(self, q_j):
+        """electrons flushed from the pocket when reading
+
+        Parameters
+        ----------
+        q_i : array-like of floats
+          pocket content, j-th column
+
+        Returns
+        -------
+        number of electrons transfered from pocket : array-like of floats
+        """
+        x = q_j / self.cmax
+        from_pocket = np.clip(self.cmax * np.pow(x, self.alpha), 0., q_j)
+        return from_pocket
+
+    def _fill(self, q_j, n_j):
+        """electrons transfered from the pixel to the pocket
+
+        Parameters
+        ----------
+        q_j : array-like of floats
+          pocket contents j-th column
+        n_j : array-like of floats
+          pixel contents, j-th column
+
+        """
+        x = q_j / self.cmax
+        y = n_j / self.nmax
+        to_pocket = np.clip(self.cmax * np.pow(1.-x, self.alpha) * np.pow(y, self.beta),
+                            0.,  n_j)
+
+    def apply(self, pix):
+        """apply the model to 2D image
+
+        Parameters
+        ----------
+        pix : 2D array-like of floats
+          we assume that i labels the rows and j labels the physical columns.
+
+        .. note:: columns and rows are *not* interchangeable here !
+        """
+        nrows, ncols = pix.shape
+
+        output = np.zeros_like(pix)
+        pocket = np.zeros(nrows)
+
+        for j in range(ncols):
+            n_j = pix[:,j]
+            from_pocket = self._flush(pocket)
+            to_pocket = self._fill(pocket, n_j)
+            delta = from_pocket - to_pocket
+            output[:,j] = n_j + delta
+            pocket -= delta
+            # just making sure that the pocket contents never become negative
+            #
+            # we may clip silently, but it is better for now to know that the
+            # correction is buggy and can throw the calculation into the ditch
+            assert np.all(pocket >= 0.)
+
+        return output
+
 
 
 def pocket_model_derivatives(model, pix, step=0.01):
@@ -173,3 +253,26 @@ def correct_2d(model, pix, step=0.01, n_iter=4):
     print(f'time: {stop-start}')
 
     return current_state, delta_tot, mask
+
+
+def get_model_parameter_file(filename=None):
+    """
+    """
+    if filename is None:
+        filename = 'pocket_corrections.yaml'
+    return files(__package__).joinpath('data', filename)
+
+
+class PocketModelServer:
+
+    def __init__(self, filename=None):
+        """Constructor
+        """
+        path = get_model_parameter_file(filename)
+        yaml = YAML()
+        self.db = yaml.load(path)
+        self.data = self.db['data']
+
+    def __call__(self, ccdid, qid, mjd=None):
+        """
+        """
