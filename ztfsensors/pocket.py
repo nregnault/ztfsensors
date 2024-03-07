@@ -211,6 +211,9 @@ class PocketModel():
         elif backend == "numpy": 
             return self._forloop_apply(pixels, init=init)
         
+        elif backend == "numpy-nr":
+            return self._forloop_apply_baseline(pixels)
+        
         elif backend == "cpp":
             thiscpp = PocketModelCPP(self._alpha, self._cmax, self._beta, self._nmax)
             return thiscpp.apply(pixels) # 0 is force here.
@@ -248,6 +251,39 @@ class PocketModel():
             
         return np.vstack(resbuff).T.squeeze()
 
+    def _forloop_apply_baseline(self, pix):
+        """apply the model to 2D image
+
+        = original NR dev = 
+
+        Parameters
+        ----------
+        pix : 2D array-like of floats
+          we assume that i labels the rows and j labels the physical columns.
+
+        .. note:: columns and rows are *not* interchangeable here !
+        """
+        nrows, ncols = pix.shape
+
+        output = np.zeros_like(pix)
+        pocket = np.zeros(nrows)
+
+        for j in range(ncols):
+            n_j = pix[:,j]
+            from_pocket = self.flush(pocket) # _flush -> flush
+            to_pocket = self.fill(pocket, n_j) #  _fill -> fillflush
+            delta = from_pocket - to_pocket
+            output[:,j] = n_j + delta
+            pocket -= delta
+            # just making sure that the pocket contents never become negative
+            #
+            # we may clip silently, but it is better for now to know that the
+            # correction is buggy and can throw the calculation into the ditch
+            assert np.all(pocket >= 0.)
+
+        return output
+
+
     # ============= #
     #  Properties   #
     # ============= #
@@ -281,7 +317,7 @@ def pocket_model_derivatives(model, pix, step=0.01):
     v0 = model.apply(pix, backend="cpp")
     for i in range(N):
         pix[i] += step
-        vv = model.apply(pix)
+        vv = model.apply(pix, backend="cpp")
         J[i] = (vv-v0)/step
         pix[i] -= step
     return J
