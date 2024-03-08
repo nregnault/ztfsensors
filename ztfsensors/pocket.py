@@ -205,6 +205,17 @@ class PocketModel():
         2d-Array
             pocket effect on pixel map (M,N)
         """
+        # special case, computation not from python
+        if backend == "cpp":
+            thiscpp = PocketModelCPP(self._alpha, self._cmax, self._beta, self._nmax)
+            return thiscpp.apply(pixels) # 0 is force here.
+
+        # good format
+        pixels = np.atleast_2d(pixels)
+        if init is None:
+            init = np.zeros(shape=pixels[:,0].shape)
+
+        # call current sub-function            
         if backend == "jax":
             return self._scan_apply(pixels, init=init)
         
@@ -214,10 +225,6 @@ class PocketModel():
         elif backend == "numpy-nr":
             return self._forloop_apply_baseline(pixels)
         
-        elif backend == "cpp":
-            thiscpp = PocketModelCPP(self._alpha, self._cmax, self._beta, self._nmax)
-            return thiscpp.apply(pixels) # 0 is force here.
-            
         else:
             raise ValueError(f"unknown backend {backend}")
         
@@ -226,9 +233,7 @@ class PocketModel():
         # with for lax.scan | jax
         # atleast_2d and squeeze is to respect cpp-version behavior
         
-        pixels = np.atleast_2d(pixels)
-        if init is None:
-            init = np.zeros(shape=pixels[:,0].shape)
+
         
         last_pocket, resbuff = jax.lax.scan(self.get_pocket_and_corr,
                                                 init,
