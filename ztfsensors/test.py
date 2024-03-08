@@ -1,5 +1,5 @@
 
-def get_pocket_test(filename = "ztf_20200401152477_000517_zg_c06_o.fits.fz"):
+def get_pocket_test(filename = "ztf_20200401152477_000517_zg_c06_o.fits.fz", data=False):
     """ get the pocket model and a raw-data_and_overscan test case.
     
     Returns
@@ -28,6 +28,8 @@ def get_pocket_test(filename = "ztf_20200401152477_000517_zg_c06_o.fits.fz"):
     
     # the model with quadrant's pocket parameter
     pocket_model = pocket.PocketModel(**pocket.get_config(quad.ccdid, quad.qid).values[0])
+    if data:
+        return pocket_model, data_and_overscan
     
     current_state = data_and_overscan.copy()
     current_state[:,-30:] = 0. # set overscan to zero
