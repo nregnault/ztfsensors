@@ -14,12 +14,12 @@ from ._pocket import PocketModel as PocketModelCPP
 
 __all__ = ["PocketModel", "correct_pixels"]
 
-def correct_pixels(model, pixels, hessian=None, 
-                      n_overscan=30, 
+def correct_pixels(model, pixels, hessian=None,
+                      n_overscan=30,
                      n_iter=4, backend="numpy"):
     """ shortcut to PocketModel.correct_pixels """
-    return model.correct_pixels(pixels, hessian=hessian, 
-                                n_overscan=n_overscan, 
+    return model.correct_pixels(pixels, hessian=hessian,
+                                n_overscan=n_overscan,
                                 n_iter=n_iter, backend=backend)
 
 #
@@ -101,12 +101,12 @@ def _flush(pocket_q, cmax, alpha):
     #return outval
 
 class PocketModel():
-    
+
     def __init__(self, alpha, cmax, beta, nmax):
-        """ 
+        """
         cmax: float
             pocket capacity
-        
+
         nmax: float
             pixel capacity (not quite the full well)
 
@@ -114,21 +114,21 @@ class PocketModel():
             from pocket transfer dynamics
 
         beta: float
-            to-pocket transfer dynamics        
+            to-pocket transfer dynamics
 
         """
         self._alpha = alpha
         self._cmax = cmax
         self._beta = beta
         self._nmax = nmax
-        
+
 
     # ============= #
     #   Top level   #
     # ============= #
     def correct_pixels(self, pixels,
-                        hessian=None, 
-                        n_overscan=30, 
+                        hessian=None,
+                        n_overscan=30,
                         n_iter=4, backend="numpy"):
         """ top level method returning model-corrected pixels
 
@@ -136,15 +136,15 @@ class PocketModel():
         ----------
         pixels: 2d-array
             raw-pixel + overscan (N,M+overscan_size)
-            pixels are expected to be corrected from 
+            pixels are expected to be corrected from
             non-linearity and overscan.
-            
+
         hessian: scipy.sparse.Matrix, None
             sparse hessien matrix used to fit the model.
 
         n_overscan: int
             number of overscan columns. In the input pixels
-            
+
         n_iter: int
             number of iteration for the fit.
 
@@ -157,31 +157,31 @@ class PocketModel():
             corrected raw pixels.
         """
         default_pixel_value = np.median(pixels)
-        
+
         # build hessian if needed
         if hessian is None:
             test_column = np.full(pixels.shape[0], default_pixel_value )
             hessian = self.get_sparse_hessian(test_column)
-    
+
         # Cholesky factorisation
         cholesky_f = cholmod.cholesky(hessian.tocsc(), ordering_method='best') # tocsc() to rm warnings
-    
+
         # Actual iterative fit;
         current_state = pixels.copy()
         current_state[:, -n_overscan:] = 0 # constraints | overscan = no data
         current_state[0:2] = default_pixel_value # stability
-        
+
         for i in range(n_iter):
             res = pixels - self.apply(current_state,  backend=backend)
             delta = cholesky_f.solve_LDLt(hessian.T @ res)
-    
+
             current_state += delta # get closer to the truth
             # reset constraints
             current_state[:,-n_overscan:] = 0. # force 0 at overscan
             current_state[current_state<0.] = default_pixel_value
-    
+
         return current_state
-    
+
     # ============= #
     #  Model func   #
     # ============= #
@@ -200,7 +200,7 @@ class PocketModel():
         """
         return _flush(pocket_q,
                       self._cmax, self._alpha)
-    
+
     def fill(self, pocket_q, pixel_q):
         """ transfer of electrons entering the pocket
 
@@ -211,7 +211,7 @@ class PocketModel():
 
         pixel_q: float, Array
             pixel charge prior read-out (undistorted)
-     
+
         Returns
         -------
         float, Array
@@ -219,9 +219,9 @@ class PocketModel():
         """
         return _fill(pocket_q, pixel_q,
                      self._cmax, self._nmax, self._alpha, self._beta)
-    
+
     def get_delta(self, pocket_q, pixel_q):
-        """ net pocket charge transfert 
+        """ net pocket charge transfert
 
         Parameters
         ----------
@@ -243,7 +243,7 @@ class PocketModel():
 
     def get_pocket_and_corr(self, pocket_q, pixel_q):
         """ scanning function providing corrected pixel and new pocket charge
-        
+
         Parameters
         ----------
         pocket_q: float, Array
@@ -262,17 +262,17 @@ class PocketModel():
         pixel_corr = pixel_q + delta
         new_pocket = pocket_q - delta
         return new_pocket, pixel_corr
-        
+
     def apply(self, pixels, init=None, backend="cpp"):
-        """ pocket effect correction 
-        
+        """ pocket effect correction
+
         Parameters
         ----------
         pixels: 2d-Array
             raw pixel map, including overhead of shape (M,N)
 
         init: None, Array
-            initial condition of the pocket (M,). 
+            initial condition of the pocket (M,).
             If None, zero is assumed.
 
         backend: str
@@ -293,16 +293,16 @@ class PocketModel():
         if init is None:
             init = np.zeros(shape=pixels[:,0].shape)
 
-        # call current sub-function            
+        # call current sub-function
         if backend == "jax":
             return self._scan_apply(pixels, init=init)
-        
-        elif backend == "numpy": 
+
+        elif backend == "numpy":
             return self._forloop_apply(pixels, init=init)
-        
+
         elif backend == "numpy-nr":
             return self._forloop_apply_baseline(pixels)
-        
+
         else:
             raise ValueError(f"unknown backend {backend}")
 
@@ -315,11 +315,11 @@ class PocketModel():
         i, j = i.flatten(), j.flatten() # flattend
         v = jacobian[i.flatten(), j.flatten()]
         non_zero_idx = np.abs(v)>1.E-5
-        
+
         jac_sparse = sparse.coo_matrix(( v[non_zero_idx],
                                          (i[non_zero_idx], j[non_zero_idx])
                                        ), shape=jacobian.shape)
-    
+
         hessian_sparse = jac_sparse.T @ jac_sparse
         return hessian_sparse
 
@@ -328,7 +328,7 @@ class PocketModel():
         # to be moved inside class
         jacobian = pocket_model_derivatives(self, test_column, backend="cpp") # 460 ms
         return jacobian
-    
+
     # ====================== #
     # apply backend supports #
     # ====================== #
@@ -341,23 +341,23 @@ class PocketModel():
                                                 init,
                                                 pixels.T)
         return resbuff.T.squeeze()
-    
+
     def _forloop_apply(self, pixels, init):
         """ docstring, see: self.apply """
         # with for loop | numpy
         pocket = init # for consistency between method
         resbuff = []
-        
+
         for col in pixels.T:
             pocket, corr = self.get_pocket_and_corr(pocket, col)
             resbuff.append(corr) # build line by line
-            
+
         return np.vstack(resbuff).T.squeeze()
 
     def _forloop_apply_baseline(self, pix):
         """apply the model to 2D image
 
-        = original NR dev = 
+        = original NR dev =
 
         Parameters
         ----------
@@ -387,7 +387,7 @@ class PocketModel():
         return output
 
 
-    
+
 def pocket_model_derivatives(model, pix, step=0.01, backend="cpp"):
     """model derivatives w.r.t the pixel values
 
@@ -458,7 +458,7 @@ def correct_1d(model, pix, step=0.01, n_iter=5):
 
     """
     print("DEPRECATED, see model.correct_pixels")
-    
+
     default_pix_val = np.median(pix)
 
     J = pocket_model_derivatives(model, pix) # was 'sky'
@@ -527,7 +527,7 @@ def correct_2d(model, pix, step=0.01, n_iter=4):
 
     """
     print("DEPRECATED, see model.correct_pixels")
-    
+
     default_pix_val = np.median(pix)
 
     line_prof = np.full(pix.shape[0], default_pix_val)
