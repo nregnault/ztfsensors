@@ -1,28 +1,13 @@
 #!/usr/bin/env python3
 
-from importlib.resources import files
+import os
 
 import numpy as np
-
+import pandas
+import yaml
 from scipy import sparse
 from sksparse import cholmod
-
-#from ruamel.yaml import YAML
-
-import warnings
-import numpy
-
-try:
-    import jax
-    import jax.numpy as np
-    
-    _HAS_JAX = True
-except ImportError:
-    warnings.warn("jax is not installed. using numpy instead")
-    _HAS_JAX = False
-
-    
-import numpy as np
+from yaml.loader import SafeLoader
 
 from ._pocket import PocketModel as PocketModelCPP
 
@@ -40,10 +25,6 @@ def correct_pixels(model, pixels, hessian=None,
 #
 # config | may move in a config.py
 #
-import os
-import pandas
-import yaml
-from yaml.loader import SafeLoader
 
 _SOURCEDIR = os.path.dirname(os.path.realpath(__file__))
 CORRECTION_FILEPATH = os.path.join(_SOURCEDIR, "data", "pocket_corrections.yaml")
@@ -329,7 +310,6 @@ class PocketModel():
         """ """
         jacobian = self.get_jacobian(test_column)
 
-        import numpy as np # force numpy environment
         i, j = np.meshgrid(np.arange(jacobian.shape[0]),
                            np.arange(jacobian.shape[1]))
         i, j = i.flatten(), j.flatten() # flattend
@@ -405,15 +385,6 @@ class PocketModel():
             assert np.all(pocket >= 0.)
 
         return output
-
-
-    # ============= #
-    #  Properties   #
-    # ============= #
-    @property
-    def backend(self):
-        """ backend used for the apply() computation """
-        return self._backend
 
 
     
