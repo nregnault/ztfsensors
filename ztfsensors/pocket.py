@@ -16,9 +16,12 @@ from ._pocket import PocketModel as PocketModelCPP
 
 __all__ = ["PocketModel", "correct_pixels"]
 
+DEFAULT_BACKEND = "numpy"
+
+
 def correct_pixels(model, pixels, hessian=None,
                       n_overscan=30,
-                     n_iter=4, backend="numpy"):
+                     n_iter=4, backend=DEFAULT_BACKEND):
     """ shortcut to PocketModel.correct_pixels """
     return model.correct_pixels(pixels, hessian=hessian,
                                 n_overscan=n_overscan,
@@ -131,7 +134,7 @@ class PocketModel():
     def correct_pixels(self, pixels,
                         hessian=None,
                         n_overscan=30,
-                        n_iter=4, backend="numpy"):
+                        n_iter=4, backend=DEFAULT_BACKEND):
         """ top level method returning model-corrected pixels
 
         Parameters
@@ -163,7 +166,7 @@ class PocketModel():
         # build hessian if needed
         if hessian is None:
             test_column = np.full(pixels.shape[0], default_pixel_value )
-            hessian = self.get_sparse_hessian(test_column)
+            hessian = self.get_sparse_hessian(test_column, backend=backend)
 
         # Cholesky factorisation
         cholesky_f = cholmod.cholesky(hessian.tocsc(), ordering_method='best') # tocsc() to rm warnings
@@ -174,7 +177,7 @@ class PocketModel():
         current_state[0:2] = default_pixel_value # stability
 
         for i in range(n_iter):
-            res = pixels - self.apply(current_state,  backend=backend)
+            res = pixels - self.apply(current_state, backend=backend)
             delta = cholesky_f.solve_LDLt(hessian.T @ res)
 
             current_state += delta # get closer to the truth
@@ -265,7 +268,7 @@ class PocketModel():
         new_pocket = pocket_q - delta
         return new_pocket, pixel_corr
 
-    def apply(self, pixels, init=None, backend="cpp"):
+    def apply(self, pixels, init=None, backend=DEFAULT_BACKEND):
         """ pocket effect correction
 
         Parameters
@@ -308,9 +311,9 @@ class PocketModel():
         else:
             raise ValueError(f"unknown backend {backend}")
 
-    def get_sparse_hessian(self, test_column):
+    def get_sparse_hessian(self, test_column, backend=DEFAULT_BACKEND):
         """ """
-        jacobian = self.get_jacobian(test_column)
+        jacobian = self.get_jacobian(test_column, backend=backend)
 
         i, j = np.meshgrid(np.arange(jacobian.shape[0]),
                            np.arange(jacobian.shape[1]))
@@ -325,10 +328,10 @@ class PocketModel():
         hessian_sparse = jac_sparse.T @ jac_sparse
         return hessian_sparse
 
-    def get_jacobian(self, test_column):
+    def get_jacobian(self, test_column, backend=DEFAULT_BACKEND):
         """ """
         # to be moved inside class
-        jacobian = pocket_model_derivatives(self, test_column, backend="cpp") # 460 ms
+        jacobian = pocket_model_derivatives(self, test_column, backend=DEFAULT_BACKEND)
         return jacobian
 
     # ====================== #
@@ -390,7 +393,7 @@ class PocketModel():
 
 
 
-def pocket_model_derivatives(model, pix, step=0.01, backend="cpp"):
+def pocket_model_derivatives(model, pix, step=0.01, backend=DEFAULT_BACKEND):
     """model derivatives w.r.t the pixel values
 
     For now, we use numerical derivatives. It is probably possible to do better.
@@ -408,16 +411,18 @@ def pocket_model_derivatives(model, pix, step=0.01, backend="cpp"):
     -------
     jacobian matrix : array_like
     """
-    # may be moved as a PocketModel method.
     N = len(pix)
-    J = np.zeros((N, N))
-    v0 = model.apply(pix, backend=backend)
-    for i in range(N):
-        pix[i] += step
-        vv = model.apply(pix, backend=backend)
-        J[i] = (vv-v0)/step
-        pix[i] -= step
-    return J
+    pixim = np.resize(pix, (N+1, N))
+    np.fill_diagonal(pixim, pixim.diagonal() + step)
+    vv = model.apply(pixim, backend=backend)
+
+    if backend == "cpp":
+        v0 = model.apply(pix, backend=backend)
+    else:
+        v0 = vv[-1]
+
+    J = (vv[:-1] - v0) / step
+    return np.triu(J)
 
 
 #
