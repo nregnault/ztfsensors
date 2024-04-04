@@ -16,7 +16,7 @@ from ._pocket import PocketModel as PocketModelCPP
 
 __all__ = ["PocketModel", "correct_pixels"]
 
-DEFAULT_BACKEND = "numpy"
+DEFAULT_BACKEND = "numpy-nr"
 
 
 def correct_pixels(model, pixels, hessian=None,
