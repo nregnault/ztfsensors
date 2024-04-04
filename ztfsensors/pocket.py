@@ -306,7 +306,7 @@ class PocketModel():
             return self._forloop_apply(pixels, init=init)
 
         elif backend == "numpy-nr":
-            return self._forloop_apply_baseline(pixels)
+            return self._forloop_apply_baseline(pixels, init=init)
 
         else:
             raise ValueError(f"unknown backend {backend}")
@@ -344,7 +344,7 @@ class PocketModel():
         import jax
         last_pocket, resbuff = jax.lax.scan(self.get_pocket_and_corr,
                                                 init,
-                                                pixels.T)
+                                                np.ascontiguousarray(pixels.T))
         return resbuff.T.squeeze()
 
     def _forloop_apply(self, pixels, init):
@@ -359,7 +359,7 @@ class PocketModel():
 
         return np.vstack(resbuff).T.squeeze()
 
-    def _forloop_apply_baseline(self, pix):
+    def _forloop_apply_baseline(self, pix, init):
         """apply the model to 2D image
 
         = original NR dev =
@@ -372,24 +372,39 @@ class PocketModel():
         .. note:: columns and rows are *not* interchangeable here !
         """
         nrows, ncols = pix.shape
+        pocket = init # for consistency between method
+        pix = np.ascontiguousarray(pix.T)
 
-        output = np.zeros_like(pix)
-        pocket = np.zeros(nrows)
+        cmax_inv = 1 / self._cmax
+        pix_beta = pix / self._nmax
+        np.power(pix_beta, self._beta, out=pix_beta)
 
         for j in range(ncols):
-            n_j = pix[:,j]
-            from_pocket = self.flush(pocket) # _flush -> flush
-            to_pocket = self.fill(pocket, n_j) #  _fill -> fillflush
+            # from_pocket = self.flush(pocket):
+            # c_max * (pocket / c_max)**alpha
+            tmp = pocket * cmax_inv
+            from_pocket = tmp**self._alpha
+            np.clip(from_pocket, 0, pocket, out=from_pocket)
+
+            # to_pocket = self.fill(pocket, n_j):
+            # cmax * (1 - pocket / cmax)**alpha * (pixel / nmax)**beta
+            to_pocket = 1 - tmp
+            np.power(to_pocket, self._alpha, out=to_pocket)
+            to_pocket *= pix_beta[j]
+            np.clip(to_pocket,  0.,  pix[j], out=to_pocket)
+
             delta = from_pocket - to_pocket
-            output[:,j] = n_j + delta
+            delta *= self._cmax
+
+            pix[j] += delta
             pocket -= delta
+
             # just making sure that the pocket contents never become negative
-            #
             # we may clip silently, but it is better for now to know that the
             # correction is buggy and can throw the calculation into the ditch
-            assert np.all(pocket >= 0.)
+            # assert np.all(pocket >= 0.)
 
-        return output
+        return pix.T
 
 
 
