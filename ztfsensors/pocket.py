@@ -9,24 +9,16 @@ import pandas
 import yaml
 from scipy import sparse
 
-from sksparse import cholmod
+
 from yaml.loader import SafeLoader
 
-from ._pocket import PocketModel as PocketModelCPP
+from ._pocket import _PocketModel as PocketModelCPP
 
 
 __all__ = ["PocketModel", "correct_pixels"]
 
 DEFAULT_BACKEND = "numpy-nr"
 
-
-def correct_pixels(model, pixels, hessian=None,
-                      n_overscan=30,
-                     n_iter=4, backend=DEFAULT_BACKEND):
-    """ shortcut to PocketModel.correct_pixels """
-    return model.correct_pixels(pixels, hessian=hessian,
-                                n_overscan=n_overscan,
-                                n_iter=n_iter, backend=backend)
 
 #
 # config | may move in a config.py
@@ -71,62 +63,7 @@ class PocketModel():
     # ============= #
     #   Top level   #
     # ============= #
-    def correct_pixels(self, pixels,
-                        hessian=None,
-                        n_overscan=30,
-                        n_iter=4, backend=DEFAULT_BACKEND):
-        """ top level method returning model-corrected pixels
 
-        Parameters
-        ----------
-        pixels: 2d-array
-            raw-pixel + overscan (N,M+overscan_size)
-            pixels are expected to be corrected from
-            non-linearity and overscan.
-
-        hessian: scipy.sparse.Matrix, None
-            sparse hessien matrix used to fit the model.
-
-        n_overscan: int
-            number of overscan columns. In the input pixels
-
-        n_iter: int
-            number of iteration for the fit.
-
-        backend: string
-            backend used to apply the model (see self.apply()
-
-        Returns
-        -------
-        2d-array
-            corrected raw pixels.
-        """
-
-        default_pixel_value = np.median(pixels)
-
-        # build hessian if needed
-        if hessian is None:
-            test_column = np.full(pixels.shape[0], default_pixel_value )
-            hessian = self.get_sparse_hessian(test_column, backend=backend)
-
-        # Cholesky factorisation
-        cholesky_f = cholmod.cholesky(hessian.tocsc(), ordering_method='best') # tocsc() to rm warnings
-
-        # Actual iterative fit;
-        current_state = pixels.copy()
-        current_state[:, -n_overscan:] = 0 # constraints | overscan = no data
-        current_state[0:2] = default_pixel_value # stability
-
-        for i in range(n_iter):
-            res = pixels - self.apply(current_state, backend=backend)
-            delta = cholesky_f.solve_LDLt(hessian.T @ res)
-
-            current_state += delta # get closer to the truth
-            # reset constraints
-            current_state[:,-n_overscan:] = 0. # force 0 at overscan
-            current_state[current_state<0.] = default_pixel_value
-
-        return current_state
 
     # ============= #
     #  Model func   #
@@ -161,8 +98,14 @@ class PocketModel():
         float, Array
             pixel charge excess (>0) and deficit (<0) at the read-out.
         """
-        from_pocket = self.flush(pocket_q)
-        to_pocket = self.fill(pocket_q, pixel_q)
+        # flush
+        x = pocket_q / self._cmax
+        from_pocket = np.clip(self._cmax * x**self._alpha, 0, pocket_q)
+
+        # fill
+        y = pixel_q / model._nmax
+        to_pocket = np.clip(self._cmax * (1 - x)**self._alpha * y**self._beta,  0., pixel_q)
+
         delta = from_pocket - to_pocket
         return delta
 
