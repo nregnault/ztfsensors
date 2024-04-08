@@ -33,9 +33,12 @@ def correct_pixels(model, pixels, hessian=None,
                       n_overscan=30, 
                      n_iter=4, backend="numpy"):
     """ shortcut to PocketModel.correct_pixels """
+    
     return model.correct_pixels(pixels, hessian=hessian, 
                                 n_overscan=n_overscan, 
                                 n_iter=n_iter, backend=backend)
+
+
 
 #
 # config | may move in a config.py
@@ -93,7 +96,7 @@ def _fill(pocket_q, pixel_q, cmax, nmax, alpha, beta):
     y = pixel_q / nmax
     outval = cmax * (1 - x)**alpha * y**beta
     return np.clip(outval,  0.,  pixel_q)
-    #return outval
+
 
 def _flush(pocket_q, cmax, alpha):
     """ pocket charge flushing function
@@ -117,7 +120,6 @@ def _flush(pocket_q, cmax, alpha):
     x = pocket_q / cmax
     outval = cmax * x**alpha
     return np.clip(outval, 0, pocket_q)
-    #return outval
 
 class PocketModel():
     
@@ -141,7 +143,6 @@ class PocketModel():
         self._beta = beta
         self._nmax = nmax
         
-
     # ============= #
     #   Top level   #
     # ============= #
@@ -394,7 +395,7 @@ class PocketModel():
         for j in range(ncols):
             n_j = pix[:,j]
             from_pocket = self.flush(pocket) # _flush -> flush
-            to_pocket = self.fill(pocket, n_j) #  _fill -> fillflush
+            to_pocket = self.fill(pocket, n_j) #  _fill -> fill
             delta = from_pocket - to_pocket
             output[:,j] = n_j + delta
             pocket -= delta
