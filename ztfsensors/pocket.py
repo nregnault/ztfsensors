@@ -103,7 +103,7 @@ class PocketModel():
         from_pocket = np.clip(self._cmax * x**self._alpha, 0, pocket_q)
 
         # fill
-        y = pixel_q / model._nmax
+        y = pixel_q / self._nmax
         to_pocket = np.clip(self._cmax * (1 - x)**self._alpha * y**self._beta,  0., pixel_q)
 
         delta = from_pocket - to_pocket
