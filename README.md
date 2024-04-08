@@ -15,7 +15,7 @@ conda create -n sensors
 conda activate sensors
 
 # using mamba instead of conda is much faster
-mamba install numpy scipy matplotlib scikit-sparse pybind11 ipython pandas
+mamba install numpy scipy matplotlib scikit-sparse pybind11 ipython pandas ruamel.yaml
 ```
 
 Now, you can install ztfsensors:

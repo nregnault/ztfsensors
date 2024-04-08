@@ -15,14 +15,14 @@ typedef py::array_t<double> npa;
 
 
 // the pocket model hosts 
-class PocketModel {
+class _PocketModel {
 public:
-    PocketModel(double alpha, double cmax, double beta, double nmax)
+    _PocketModel(double alpha, double cmax, double beta, double nmax)
         : _alpha(alpha), _cmax(cmax), _beta(beta), _nmax(nmax)
     {
     }
 
-    ~PocketModel() { }
+    ~_PocketModel() { }
 
     // transfer of electrons from the pocket to the pixels.
     // We expect it to be an increasing function of the pocket contents.
@@ -105,8 +105,8 @@ private:
 
 
 PYBIND11_MODULE(_pocket, m) {
-   py::class_<PocketModel>(m, "PocketModel")
+   py::class_<_PocketModel>(m, "_PocketModel")
 	   .def(py::init<double,double,double,double>())
-	   .def("apply", &PocketModel::apply);
+	   .def("apply", &_PocketModel::apply);
 }
 

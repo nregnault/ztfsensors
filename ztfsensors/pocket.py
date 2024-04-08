@@ -8,6 +8,7 @@ import numpy as np
 import pandas
 import yaml
 from scipy import sparse
+
 from sksparse import cholmod
 from yaml.loader import SafeLoader
 
@@ -43,67 +44,6 @@ with open(CORRECTION_FILEPATH) as f:
 def get_config(ccdid, qid):
     """ returns the pocket effect parameter configuration for the given quadrant """
     return POCKET_PARAMETERS.loc[ccdid, qid]
-
-# ============= #
-#  Internal Jax #
-# ============= #
-def _fill(pocket_q, pixel_q, cmax, nmax, alpha, beta):
-    """ pocket charge filling function
-
-    Parameters
-    ----------
-    pocket_q: float, Array
-        charge in the pocket prior read-out
-
-    pixel_q: float, Array
-        pixel charge prior read-out (undistorted)
-
-    cmax: float
-        pocket capacity
-
-    nmax: float
-        pixel capacity (not quite the full well)
-
-    alpha: float
-        from pocket transfer dynamics
-
-    beta: float
-        to-pocket transfer dynamics
-
-    Returns
-    -------
-    float, Array
-        charge entering the pocket.
-    """
-    x = pocket_q / cmax
-    y = pixel_q / nmax
-    outval = cmax * (1 - x)**alpha * y**beta
-    return np.clip(outval,  0.,  pixel_q)
-    #return outval
-
-def _flush(pocket_q, cmax, alpha):
-    """ pocket charge flushing function
-
-    Parameters
-    ----------
-    pocket_q: float, Array
-        charge in the pocket prior read-out
-
-    cmax: float
-        pocket capacity
-
-    alpha: float
-        from pocket transfer dynamics
-
-    Returns
-    -------
-    float, Array
-        charge leaving the pocket.
-    """
-    x = pocket_q / cmax
-    outval = cmax * x**alpha
-    return np.clip(outval, 0, pocket_q)
-    #return outval
 
 class PocketModel():
 
@@ -161,6 +101,7 @@ class PocketModel():
         2d-array
             corrected raw pixels.
         """
+
         default_pixel_value = np.median(pixels)
 
         # build hessian if needed
@@ -203,27 +144,6 @@ class PocketModel():
         float, Array
             charge leaving the pocket.
         """
-        return _flush(pocket_q,
-                      self._cmax, self._alpha)
-
-    def fill(self, pocket_q, pixel_q):
-        """ transfer of electrons entering the pocket
-
-        Parameters
-        ----------
-        pocket_q: float, Array
-            charge in the pocket prior read-out
-
-        pixel_q: float, Array
-            pixel charge prior read-out (undistorted)
-
-        Returns
-        -------
-        float, Array
-            charge entering the pocket.
-        """
-        return _fill(pocket_q, pixel_q,
-                     self._cmax, self._nmax, self._alpha, self._beta)
 
     def get_delta(self, pocket_q, pixel_q):
         """ net pocket charge transfert
