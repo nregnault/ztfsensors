@@ -2,7 +2,7 @@
 """
 
 import numpy as np
-import pylab as pl
+#import pylab as pl
 
 
 class GaussianPSF1D:
