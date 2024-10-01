@@ -12,7 +12,6 @@ from scipy import sparse
 
 from yaml.loader import SafeLoader
 
-from ._pocket import _PocketModel as PocketModelCPP
 
 
 __all__ = ["PocketModel", "correct_pixels"]
@@ -153,6 +152,7 @@ class PocketModel():
         """
         # special case, computation not from python
         if backend == "cpp":
+            from ._pocket import _PocketModel as PocketModelCPP
             thiscpp = PocketModelCPP(self._alpha, self._cmax, self._beta, self._nmax)
             return thiscpp.apply(pixels) # 0 is force here.
 
