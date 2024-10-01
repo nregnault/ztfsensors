@@ -13,8 +13,7 @@ from scipy import sparse
 from yaml.loader import SafeLoader
 
 
-
-__all__ = ["PocketModel", "correct_pixels"]
+__all__ = ["PocketModel"]
 
 DEFAULT_BACKEND = "numpy-nr"
 
