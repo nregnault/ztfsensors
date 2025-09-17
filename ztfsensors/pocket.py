@@ -239,6 +239,10 @@ class PocketModel():
 
         cmax_inv = 1 / self._cmax
         pix_beta = pix / self._nmax
+
+        # make sure input data does not contain negative values, so we
+        # don't get NaNs when computing the power
+        np.maximum(pix_beta, 0, out=pix_beta)
         np.power(pix_beta, self._beta, out=pix_beta)
 
         for j in range(ncols):
@@ -262,9 +266,7 @@ class PocketModel():
             pocket -= delta
 
             # just making sure that the pocket contents never become negative
-            # we may clip silently, but it is better for now to know that the
-            # correction is buggy and can throw the calculation into the ditch
-            # assert np.all(pocket >= 0.)
+            np.maximum(pocket, 0, out=pocket)
 
         return pix.T
 
