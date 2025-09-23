@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
+from ztfsensors.correct import correct_pixels
 from ztfsensors.pocket import PocketModel
-from ztfsensors.test import POCKET_PARAMS, simulate_1d, simulate_2d
+from ztfsensors.test import POCKET_PARAMS, get_pocket_test, simulate_1d, simulate_2d
 
 BACKENDS = ["numpy-nr", "numpy", "cpp"]
 # data_and_overscan = correct_pixels(model, data)
@@ -37,4 +38,18 @@ def test_apply_all_backends_2d(shape, skylev, noise):
     for name in BACKENDS[1:]:
         np.testing.assert_array_almost_equal(
             res[ref][:, 50:], res[name][:, 50:], decimal=8
+        )
+
+
+def test_image():
+    model, data = get_pocket_test()
+    res = {name: correct_pixels(model, data.copy(), backend=name) for name in BACKENDS}
+
+    # test that all methods give the same result
+    # note: we exclude the first 10 columns because there are some differences
+    # with the cpp version for the first columns...
+    ref = BACKENDS[0]
+    for name in BACKENDS[1:]:
+        np.testing.assert_array_almost_equal(
+            res[ref][:, 10:], res[name][:, 10:], decimal=2
         )
