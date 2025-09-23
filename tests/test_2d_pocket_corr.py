@@ -1,5 +1,4 @@
 
-import numpy as np
 import pylab as pl
 from ztfsensors import sims, PocketModel
 from ztfsensors import pocket
@@ -29,7 +28,5 @@ def test_2d_pocket_corr(shape=(1000,1000), skylev=322.):
     axes[1].set_xlabel('x [pixels]')
     axes[1].set_title('correction')
     fig.suptitle('2D correction')
-
-    print(cs)
 
     return cs, delta

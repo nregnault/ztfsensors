@@ -8,10 +8,8 @@ import numpy as np
 import pandas
 import yaml
 from scipy import sparse
-
-
+from sksparse import cholmod
 from yaml.loader import SafeLoader
-
 
 __all__ = ["PocketModel"]
 
