@@ -14,7 +14,7 @@ test_column = np.full(pixels.shape[0], np.median(pixels))
 # %timeit pocket_model.apply(pixels.copy(), backend="jax");
 # %timeit pocket_model.apply(pixels.copy(), backend="cpp");
 
-backends = ["numpy-nr", "numpy", "jax", "cpp"]
+backends = ["numpy-nr", "numpy", "cpp"]  # "jax",
 number, repeat = 5, 5
 
 benchmarks = {

@@ -1,6 +1,4 @@
 
-import numpy as np
-import pylab as pl
 from ztfsensors import sims, PocketModel
 from ztfsensors import pocket
 
@@ -27,5 +25,3 @@ def test_1d_pocket_corr(size=250, noise=True):
     # fig = pl.gcf()
     # fig.axes[0].plot(cs, 'g.:')
     # fig.axes[1].plot(delta, 'g.:')
-
-    

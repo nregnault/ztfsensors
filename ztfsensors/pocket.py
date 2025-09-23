@@ -8,10 +8,8 @@ import numpy as np
 import pandas
 import yaml
 from scipy import sparse
-
-
+from sksparse import cholmod
 from yaml.loader import SafeLoader
-
 
 __all__ = ["PocketModel"]
 
@@ -219,7 +217,7 @@ class PocketModel():
             pocket, corr = self.get_pocket_and_corr(pocket, col)
             resbuff.append(corr) # build line by line
 
-        return np.vstack(resbuff).T.squeeze()
+        return np.vstack(resbuff).T
 
     def _forloop_apply_baseline(self, pix, init):
         """apply the model to 2D image
@@ -250,17 +248,17 @@ class PocketModel():
             # c_max * (pocket / c_max)**alpha
             tmp = pocket * cmax_inv
             from_pocket = tmp**self._alpha
+            from_pocket *= self._cmax
             np.clip(from_pocket, 0, pocket, out=from_pocket)
 
             # to_pocket = self.fill(pocket, n_j):
             # cmax * (1 - pocket / cmax)**alpha * (pixel / nmax)**beta
             to_pocket = 1 - tmp
             np.power(to_pocket, self._alpha, out=to_pocket)
-            to_pocket *= pix_beta[j]
+            to_pocket *= pix_beta[j] * self._cmax
             np.clip(to_pocket,  0.,  pix[j], out=to_pocket)
 
             delta = from_pocket - to_pocket
-            delta *= self._cmax
 
             pix[j] += delta
             pocket -= delta
