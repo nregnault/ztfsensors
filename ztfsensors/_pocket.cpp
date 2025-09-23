@@ -50,7 +50,11 @@ public:
         double y = n_i / _nmax;
         if(y<0.)
             return 0.;
-        return _cmax * pow(1.-x, _alpha) * pow(y, _beta);
+        double to_pocket = _cmax * pow(1.-x, _alpha) * pow(y, _beta);
+        if (to_pocket>n_i)
+          return n_i;
+        else
+          return to_pocket;
     }
 
     // apply the model to a line
