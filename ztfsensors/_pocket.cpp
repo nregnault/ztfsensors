@@ -36,7 +36,11 @@ public:
               return 0.;
           }
       double x = q_i / _cmax;
-      return _cmax * pow(x, _alpha);
+      double from_pocket = _cmax * pow(x, _alpha);
+      if (from_pocket>q_i)
+          return q_i;
+      else
+          return from_pocket;
     }
 
     // transfer of electrons from the pixel to the pocket.
@@ -52,9 +56,9 @@ public:
             return 0.;
         double to_pocket = _cmax * pow(1.-x, _alpha) * pow(y, _beta);
         if (to_pocket>n_i)
-          return n_i;
+            return n_i;
         else
-          return to_pocket;
+            return to_pocket;
     }
 
     // apply the model to a line
