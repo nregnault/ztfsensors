@@ -53,3 +53,20 @@ def test_image():
         np.testing.assert_array_almost_equal(
             res[ref][:, 10:], res[name][:, 10:], decimal=2
         )
+
+
+def test_image_nans():
+    model, data = get_pocket_test("ztf_20180911343345_000600_zr_c15_o.fits.fz")
+    res = {name: correct_pixels(model, data.copy(), backend=name) for name in BACKENDS}
+
+    for name in BACKENDS:
+        assert np.isnan(res["numpy-nr"]).sum() == 0
+
+    # test that all methods give the same result
+    # note: we exclude the first 10 columns because there are some differences
+    # with the cpp version for the first columns...
+    ref = BACKENDS[0]
+    for name in BACKENDS[1:]:
+        np.testing.assert_array_almost_equal(
+            res[ref][:, 10:], res[name][:, 10:], decimal=2
+        )
