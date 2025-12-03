@@ -43,12 +43,8 @@ class Line:
         self.skylev = skylev
         self.overscan_width = overscan_width
         self.stars = stars
-
-        # self.orig_data = np.zeros(size + overscan_width)
-        # self.orig_data[:size] += skylev
-        # self.true_data = None
-        # self.distorted_data = None
         self.reset()
+
         if stars:
             psf = GaussianPSF1D()
             self.add_stars(self.stars, psf)
@@ -66,18 +62,20 @@ class Line:
         for s in stars:
             vals, slc = psf(s, self.size)
             self.orig_data[slc] += vals
+        # self.true_data = self.orig_data[:self.size]
+        self.true_data = self.orig_data.copy()
         return self
 
     def add_noise(self):
         self.true_data = np.zeros_like(self.orig_data)
         self.true_data[:self.size] = self.orig_data[:self.size] + \
             np.random.normal(loc=0., scale=np.sqrt(self.orig_data[:self.size]), size=self.size)
-        self.distored_data = None
+        self.distorted_data = None
         return self
 
     def gen_stars(self, n):
         x = np.random.uniform(0, self.size, n)
-        flux = np.random.uniform(0, 100000., n)
+        flux = np.random.uniform(0, 10000., n)
         l = np.rec.fromarrays((x, flux), names=['x', 'flux'])
         return l
 
@@ -89,26 +87,27 @@ class Line:
         self.distorted_data = model.apply(self.true_data)
         return self
 
-    def plot(self, reco=None):
+    def plot(self, reco=None, **kwargs):
         if reco is not None:
-            fig, axes = pl.subplots(nrows=3, ncols=1, sharex=True, figsize=(12,12))
+            fig, axes = pl.subplots(nrows=3, ncols=1, sharex=True, figsize=(12,10))
         else:
-            fig, axes = pl.subplots(nrows=2, ncols=1, sharex=True, figsize=(12,12))
+            fig, axes = pl.subplots(nrows=2, ncols=1, sharex=True, figsize=(12,10))
 
         axes[0].plot(self.orig_data, 'k:', label='orig data')
         if self.true_data is not None:
             axes[0].plot(self.true_data, 'k.', label='orig + noise (truth)')
         if self.distorted_data is not None:
-            axes[0].plot(self.distorted_data, 'r-.', label='distorted')
+            axes[0].plot(self.distorted_data, color='r', marker='+', ls='--', label='distorted')
         if reco is not None:
             axes[0].plot(reco + self.distorted_data, 'b.', label='reconstructed')
         axes[0].set_ylabel('flux')
         axes[0].legend(loc='best')
 
         if self.distorted_data is not None:
-            axes[1].plot(self.distorted_data - self.true_data, 'r.', label='distortion')
+            axes[1].plot(self.distorted_data - self.true_data, color='r', marker='.', ls=':', label='distortion')
         if reco is not None:
             axes[1].plot(reco, 'b.', label='correction')
+        axes[1].axhline(0., color='gray', ls=':')
         axes[1].legend(loc='best')
         axes[1].set_ylabel('distorted - true')
         axes[1].set_xlabel('x')
@@ -120,6 +119,11 @@ class Line:
             axes[2].set_ylim((-100,100))
 
         pl.subplots_adjust(hspace=0.005)
+        if 'suptitle' in kwargs:
+            fig.suptitle(kwargs['suptitle'])
+        if 'savefig' in kwargs:
+            fig.savefig(kwargs['savefig'], bbox_inches='tight')
+
 
 class GaussianPSF2D:
 
