@@ -29,10 +29,24 @@ with open(CORRECTION_FILEPATH) as f:
     POCKET_PARAMETERS = pandas.DataFrame(data["data"]).set_index(["ccdid", "qid"])
 
 
-def get_config(ccdid, qid):
+def get_config(ccdid=None, qid=None,
+               pixels=None, n_overscan=None,
+                   use_global_parameters=True):
     """ returns the pocket effect parameter configuration for the given quadrant """
-    return POCKET_PARAMETERS.loc[ccdid, qid]
+    # This is a patch currently
+    if use_global_parameters:
+        pocket_config = POCKET_PARAMETERS.loc[ccdid, qid]
+    else:
+        pocket_config = fit_for_pocket_config(pixels=pixels, n_overscan=n_overscan)
+        raise NotImplementedError("only use_global_parameters have been implemented")
 
+    return pocket_config
+
+def fit_pocket_config(pixels=pixels, n_overscan=n_overscan):
+    """ """
+    # Nicolas, this is here.
+    return None
+    
 class PocketModel():
 
     def __init__(self, alpha, cmax, beta, nmax):
