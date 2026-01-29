@@ -42,7 +42,7 @@ def get_config(ccdid=None, qid=None,
 
     return pocket_config
 
-def fit_pocket_config(pixels=pixels, n_overscan=n_overscan):
+def fit_pocket_config(pixels=None, n_overscan=30):
     """ """
     # Nicolas, this is here.
     return None
