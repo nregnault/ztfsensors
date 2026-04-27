@@ -1,13 +1,17 @@
+# DEPRECATED
+# this is the first version of the pocket correction.
+# DEPRECATED
+
 import numpy as np
 from sksparse import cholmod
 
 from .pocket import DEFAULT_BACKEND
 
-def correct_pixels(model, pixels,
-                    hessian=None,
-                    n_overscan=30,
-                    n_iter=4, backend=DEFAULT_BACKEND):
-    """ top level method returning model-corrected pixels
+
+def correct_pixels(
+    model, pixels, hessian=None, n_overscan=30, n_iter=4, backend=DEFAULT_BACKEND
+):
+    """top level method returning model-corrected pixels
 
     Parameters
     ----------
@@ -38,24 +42,26 @@ def correct_pixels(model, pixels,
 
     # build hessian if needed
     if hessian is None:
-        test_column = np.full(pixels.shape[0], default_pixel_value )
+        test_column = np.full(pixels.shape[0], default_pixel_value)
         hessian = model.get_sparse_hessian(test_column, backend=backend)
 
     # Cholesky factorisation
-    cholesky_f = cholmod.cholesky(hessian.tocsc(), ordering_method='best') # tocsc() to rm warnings
+    cholesky_f = cholmod.cholesky(
+        hessian.tocsc(), ordering_method="best"
+    )  # tocsc() to rm warnings
 
     # Actual iterative fit;
     current_state = pixels.copy()
-    current_state[:, -n_overscan:] = 0 # constraints | overscan = no data
-    current_state[0:2] = default_pixel_value # stability
+    current_state[:, -n_overscan:] = 0  # constraints | overscan = no data
+    current_state[0:2] = default_pixel_value  # stability
 
     for i in range(n_iter):
         res = pixels - model.apply(current_state, backend=backend)
         delta = cholesky_f.solve_LDLt(hessian.T @ res)
 
-        current_state += delta # get closer to the truth
+        current_state += delta  # get closer to the truth
         # reset constraints
-        current_state[:,-n_overscan:] = 0. # force 0 at overscan
-        current_state[current_state<0.] = default_pixel_value
+        current_state[:, -n_overscan:] = 0.0  # force 0 at overscan
+        current_state[current_state < 0.0] = default_pixel_value
 
     return current_state
