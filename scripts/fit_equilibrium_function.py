@@ -334,6 +334,12 @@ Examples:
                 "--show-plots used with --backend agg. Switching to interactive backend."
             )
             backend_mode = "interactive"
+    elif backend_mode == "auto":
+        # If no interactive plotting requested and backend is auto, use Agg
+        # to avoid opening windows
+        if not pause_after_each:
+            backend_mode = "agg"
+            logging.info("No interactive plotting requested, using Agg backend")
 
     close_figures = not no_close_figures
 
@@ -481,18 +487,33 @@ Examples:
                 item = FitGalleryItem(
                     ccdid=rec.ccdid,
                     qid=rec.qid,
-                    mjd_start=rec.mjd_start,
-                    mjd_end=rec.mjd_end,
+                    mjd_start=mjd_start,  # Utiliser valeur de la boucle, pas du record
+                    mjd_end=mjd_end,  # Utiliser valeur de la boucle, pas du record
                     path=path,
                 )
-                gallery.items.append(item)
+                gallery.items.append(
+                    FitGalleryItem(
+                        ccdid=rec.ccdid,
+                        qid=rec.qid,
+                        mjd_start=rec.mjd_start,  # Valeur réelle pour l'index per-MJD
+                        mjd_end=rec.mjd_end,
+                        path=path,
+                    )
+                )
                 global_gallery.items.append(item)  # Ajouter à la galerie globale
         else:
             # Normal non-interactive save
             gallery.save_all(gallery_dir, close_figures=close_figures)
-            # Ajouter les items à la galerie globale
+            # Ajouter les items à la galerie globale avec MJD de la boucle
             for item in gallery.items:
-                global_gallery.items.append(item)
+                global_item = FitGalleryItem(
+                    ccdid=item.ccdid,
+                    qid=item.qid,
+                    mjd_start=mjd_start,  # Valeur de la boucle pour cohérence
+                    mjd_end=mjd_end,  # Valeur de la boucle pour cohérence
+                    path=item.path,
+                )
+                global_gallery.items.append(global_item)
 
         # Save per-MJD-range index (optionnel, peut être supprimé si non désiré)
         gallery.write_index(gallery_dir / "index.parquet")
