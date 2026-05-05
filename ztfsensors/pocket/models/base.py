@@ -162,6 +162,10 @@ class BaseEquilibriumModel(ABC):
         """
         Serialize the model configuration to a dictionary.
 
+        All numpy array values are converted to plain Python lists so the
+        result is safe to pass to ``yaml.safe_dump`` without a custom
+        representer.
+
         Returns
         -------
         dict[str, Any]
@@ -174,7 +178,11 @@ class BaseEquilibriumModel(ABC):
             "mjd_interval_convention": "[start, end)",
         }
         for name in self.HEADER_FIELDS:
-            out[name] = getattr(self, name)
+            value = getattr(self, name)
+            # yaml.safe_dump cannot serialize numpy arrays; convert to list.
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            out[name] = value
         return out
 
     def validate_header(self, header: dict[str, Any]) -> None:
@@ -278,25 +286,6 @@ class BaseEquilibriumModel(ABC):
         if not np.issubdtype(arr.dtype, np.number):
             raise TypeError(f"params must be numeric, got dtype={arr.dtype}")
         return arr
-
-    def flat_to_params(self, params):
-        """
-        Convert flat parameter array to the model's parameter structure.
-
-        The default implementation returns the array as-is. Subclasses
-        may override to reshape (e.g., for 2D parameter matrices).
-
-        Parameters
-        ----------
-        params : array_like
-            Flat array of parameters (e.g., from optimization).
-
-        Returns
-        -------
-        np.ndarray
-            Parameters in the model's native shape.
-        """
-        return np.asarray(params)
 
     def rescale_temp(self, temp):
         """

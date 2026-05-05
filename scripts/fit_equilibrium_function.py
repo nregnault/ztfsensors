@@ -12,9 +12,9 @@ import polars as pl
 import yaml
 from astropy.time import Time
 
-from ztfsensors.pocket.fit import FitResults, fit_eq_model
+from ztfsensors.pocket import FitResults, fit_eq_model
 from ztfsensors.pocket.models import PolyTempEqModel, SplineTempEqModel
-from ztfsensors.pocket.plots.eq_plots import FitGallery, FitGalleryItem
+from ztfsensors.pocket.plots import FitGallery, FitGalleryItem
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 
@@ -64,6 +64,8 @@ def load(
             (pl.col("median") - pl.col("pedestal_avg")).first().alias("skylev"),
             pl.col("pedestal_avg").first(),
             pl.col("pedestal1").first(),
+            # in the early days of the ZTF survey (before 2018-11)
+            # the overscans are only 29 column-wide.
             (
                 (pl.col("overscan_val") - pl.col("pedestal_avg"))
                 .filter(pl.col("j_overscan") >= 0)
@@ -387,7 +389,8 @@ Examples:
         logging.info("Using PolyTempEqModel")
 
     # Process each MJD range
-    global_gallery = FitGallery()  # Gallery globale pour l'index HTML final
+    global_fits = FitResults(model=eq_model)  # eq_db globale, unique
+    global_gallery = FitGallery()  # Galerie globale pour l'index HTML final
 
     for mjd_idx, (mjd_start, mjd_end) in enumerate(mjd_ranges):
         logging.info(f"\n{'=' * 60}")
@@ -396,7 +399,9 @@ Examples:
         )
         logging.info(f"{'=' * 60}")
 
-        fits = FitResults(model=eq_model)
+        fits = FitResults(
+            model=eq_model
+        )  # Résultats pour cette plage MJD uniquement (diagnostics)
         gallery = FitGallery()
 
         for ccdid in ccdids:
@@ -420,17 +425,17 @@ Examples:
                     ccdid=ccdid,
                     qid=qid,
                     eq_model=eq_model,
+                    mjd_start=mjd_start,
+                    mjd_end=mjd_end,
                 )
 
                 fits.append(record)
+                global_fits.append(record)
                 gallery.add(diag)
 
         # Save results for this MJD range
         mjd_suffix = f"mjd_{mjd_start:.1f}_{mjd_end:.1f}"
-        db_dir = output_dir / "eq_db" / mjd_suffix
         gallery_dir = output_dir / "training_gallery" / mjd_suffix
-
-        fits.save(db_dir)
 
         # Save gallery with interactive display if requested
         if show_plots or pause_after_each:
@@ -490,33 +495,17 @@ Examples:
                 item = FitGalleryItem(
                     ccdid=rec.ccdid,
                     qid=rec.qid,
-                    mjd_start=mjd_start,  # Utiliser valeur de la boucle, pas du record
-                    mjd_end=mjd_end,  # Utiliser valeur de la boucle, pas du record
+                    mjd_start=rec.mjd_start,
+                    mjd_end=rec.mjd_end,
                     path=path,
                 )
-                gallery.items.append(
-                    FitGalleryItem(
-                        ccdid=rec.ccdid,
-                        qid=rec.qid,
-                        mjd_start=rec.mjd_start,  # Valeur réelle pour l'index per-MJD
-                        mjd_end=rec.mjd_end,
-                        path=path,
-                    )
-                )
-                global_gallery.items.append(item)  # Ajouter à la galerie globale
+                gallery.items.append(item)
+                global_gallery.items.append(item)
         else:
             # Normal non-interactive save
             gallery.save_all(gallery_dir, close_figures=close_figures)
-            # Ajouter les items à la galerie globale avec MJD de la boucle
             for item in gallery.items:
-                global_item = FitGalleryItem(
-                    ccdid=item.ccdid,
-                    qid=item.qid,
-                    mjd_start=mjd_start,  # Valeur de la boucle pour cohérence
-                    mjd_end=mjd_end,  # Valeur de la boucle pour cohérence
-                    path=item.path,
-                )
-                global_gallery.items.append(global_item)
+                global_gallery.items.append(item)
 
         # Save per-MJD-range index (optionnel, peut être supprimé si non désiré)
         gallery.write_index(gallery_dir / "index.parquet")
@@ -532,6 +521,14 @@ Examples:
             )
             input()
             plt.close("all")
+
+    # Sauvegarder l'eq_db globale unique
+    logging.info("\n" + "=" * 60)
+    logging.info("Saving global eq_db...")
+    logging.info("=" * 60)
+
+    global_fits.save(output_dir / "eq_db")
+    logging.info(f"Global eq_db saved to {output_dir / 'eq_db'}")
 
     # Générer la galerie HTML globale avec toutes les plages MJD
     logging.info("\n" + "=" * 60)

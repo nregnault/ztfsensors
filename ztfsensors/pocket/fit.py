@@ -138,12 +138,12 @@ class FitResults:
         -------
         pl.DataFrame
             DataFrame with columns: ccdid, qid, mjd_start, mjd_end,
-            temp_min, temp_max, and params (nested list).
+            temp_min, temp_max, and params.
 
         Notes
         -----
-        The params column contains nested lists to accommodate multi-dimensional
-        parameter arrays (e.g., for spline models with 2D parameter matrices).
+        The ``params`` column stores parameters as a flat ``List(Float64)``
+        matching the model's ``params_shape``.
         """
         rows = []
         for rec in self.records:
@@ -169,7 +169,7 @@ class FitResults:
                 "mjd_end": pl.Float64,
                 "temp_min": pl.Float64,
                 "temp_max": pl.Float64,
-                "params": pl.List(pl.List(pl.Float64)),
+                "params": pl.List(pl.Float64),
             },
         )
 
@@ -422,6 +422,8 @@ def fit_eq_model(
     ccdid,
     qid,
     eq_model,
+    mjd_start: float | None = None,
+    mjd_end: float | None = None,
     sky_min: float = 50.0,
     sky_max: float = 10000.0,
     y_min: float = 0.0,
@@ -516,11 +518,11 @@ def fit_eq_model(
     record = FitRecord(
         ccdid=ccdid,
         qid=qid,
-        mjd_start=ddf["mjd"].min(),
-        mjd_end=ddf["mjd"].max() + 1.0,
+        mjd_start=mjd_start if mjd_start is not None else float(ddf["mjd"].min()),
+        mjd_end=mjd_end if mjd_end is not None else float(ddf["mjd"].max()) + 1.0,
         temp_min=ddf["cryotemp"].min(),
         temp_max=ddf["cryotemp"].max(),
-        params=eq_model.flat_to_params(params),
+        params=np.asarray(params),
     )
 
     diag = FitDiagnostics.from_fit_data(

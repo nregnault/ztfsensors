@@ -66,7 +66,6 @@ class TestInitialization:
         assert model.temp_ref == 160.0
         assert model.temp_scale == 1.0
         assert model.basis_order == 4
-        assert model.param_layout == "basis_major_high_to_low_temp_power"
         # Default grid is geomspace(50, 10000, 10)
         assert len(model.basis_grid) == 10
         assert model.basis_grid[0] == 50.0
@@ -140,11 +139,6 @@ class TestInitialization:
         with pytest.raises(ValueError, match="Provided basis_size"):
             SplineTempEqModel(basis_grid=grid, basis_order=4, basis_size=999)
 
-    def test_custom_param_layout(self):
-        """Test initialization with custom param_layout."""
-        model = SplineTempEqModel(param_layout="custom_layout")
-        assert model.param_layout == "custom_layout"
-
     def test_model_name_and_version(self, default_spline_model):
         """Test that model has correct name and version."""
         assert default_spline_model.MODEL_NAME == "spline_temp_eq"
@@ -159,7 +153,6 @@ class TestInitialization:
             "temp_scale",
             "basis_size",
             "basis_order",
-            "param_layout",
         )
         assert default_spline_model.HEADER_FIELDS == expected_fields
 
@@ -208,35 +201,32 @@ class TestParamsShape:
     def test_params_shape_default(self, default_spline_model):
         """Test params_shape with default parameters."""
         model = default_spline_model
-        # basis_size depends on grid and order, temp_deg=5
-        expected_shape = (model.basis_size, 6)  # temp_deg + 1
-        assert model.params_shape == expected_shape
+        # 1D: basis_size * (temp_deg + 1) = basis_size * 6
+        assert model.params_shape == (model.n_model_coeffs,)
 
     def test_params_shape_custom(self, custom_spline_model):
         """Test params_shape with custom parameters."""
         model = custom_spline_model
-        # temp_deg=3, so temp_deg+1=4
-        expected_shape = (model.basis_size, 4)
-        assert model.params_shape == expected_shape
+        # temp_deg=3  →  n_model_coeffs = basis_size * 4
+        assert model.params_shape == (model.basis_size * 4,)
 
     def test_params_shape_simple(self, simple_spline_model):
         """Test params_shape with simple model."""
         model = simple_spline_model
-        # temp_deg=2, so temp_deg+1=3
-        expected_shape = (model.basis_size, 3)
-        assert model.params_shape == expected_shape
+        # temp_deg=2  →  n_model_coeffs = basis_size * 3
+        assert model.params_shape == (model.basis_size * 3,)
 
-    def test_params_shape_is_2d(self, default_spline_model):
-        """Test that params_shape is 2D tuple."""
+    def test_params_shape_is_1d(self, default_spline_model):
+        """Test that params_shape is a 1-D tuple."""
         shape = default_spline_model.params_shape
-        assert len(shape) == 2
+        assert len(shape) == 1
         assert isinstance(shape[0], int)
-        assert isinstance(shape[1], int)
 
     def test_params_shape_temp_deg_zero(self):
         """Test params_shape with temp_deg=0."""
         model = SplineTempEqModel(temp_deg=0)
-        assert model.params_shape[1] == 1
+        # 1 temperature coefficient per basis function
+        assert model.params_shape == (model.basis_size,)
 
 
 # ============================================================================
@@ -248,10 +238,9 @@ class TestNModelCoeffs:
     """Test the n_model_coeffs property."""
 
     def test_n_model_coeffs_matches_shape(self, default_spline_model):
-        """Test that n_model_coeffs equals product of params_shape."""
+        """Test that n_model_coeffs equals the length of params_shape."""
         model = default_spline_model
-        expected = model.params_shape[0] * model.params_shape[1]
-        assert model.n_model_coeffs == expected
+        assert model.n_model_coeffs == model.params_shape[0]
 
     def test_n_model_coeffs_custom(self, custom_spline_model):
         """Test n_model_coeffs with custom model."""
@@ -262,78 +251,6 @@ class TestNModelCoeffs:
     def test_n_model_coeffs_is_int(self, default_spline_model):
         """Test that n_model_coeffs is an integer."""
         assert isinstance(default_spline_model.n_model_coeffs, int)
-
-
-# ============================================================================
-# Test params_to_flat and flat_to_params
-# ============================================================================
-
-
-class TestParameterFlattening:
-    """Test parameter flattening and unflattening."""
-
-    def test_params_to_flat_shape(self, simple_spline_model):
-        """Test that params_to_flat returns correct shape."""
-        params = np.random.randn(*simple_spline_model.params_shape)
-        flat = simple_spline_model.params_to_flat(params)
-
-        assert flat.shape == (simple_spline_model.n_model_coeffs,)
-        assert flat.ndim == 1
-
-    def test_flat_to_params_shape(self, simple_spline_model):
-        """Test that flat_to_params returns correct shape."""
-        flat = np.random.randn(simple_spline_model.n_model_coeffs)
-        params = simple_spline_model.flat_to_params(flat)
-
-        assert params.shape == simple_spline_model.params_shape
-        assert params.ndim == 2
-
-    def test_roundtrip_flatten_unflatten(self, default_spline_model):
-        """Test that flatten and unflatten are inverses."""
-        original_params = np.random.randn(*default_spline_model.params_shape)
-
-        flat = default_spline_model.params_to_flat(original_params)
-        restored_params = default_spline_model.flat_to_params(flat)
-
-        np.testing.assert_allclose(restored_params, original_params)
-
-    def test_roundtrip_unflatten_flatten(self, default_spline_model):
-        """Test roundtrip in reverse order."""
-        original_flat = np.random.randn(default_spline_model.n_model_coeffs)
-
-        params = default_spline_model.flat_to_params(original_flat)
-        restored_flat = default_spline_model.params_to_flat(params)
-
-        np.testing.assert_allclose(restored_flat, original_flat)
-
-    def test_params_to_flat_wrong_shape(self, default_spline_model):
-        """Test that params_to_flat raises error for wrong shape."""
-        wrong_params = np.random.randn(5, 5)  # Wrong shape
-
-        with pytest.raises(ValueError):
-            default_spline_model.params_to_flat(wrong_params)
-
-    def test_flat_to_params_wrong_length(self, default_spline_model):
-        """Test that flat_to_params raises error for wrong length."""
-        wrong_flat = np.random.randn(100)  # Wrong length
-
-        with pytest.raises(ValueError, match="Expected flat beta shape"):
-            default_spline_model.flat_to_params(wrong_flat)
-
-    def test_flat_to_params_non_numeric(self, default_spline_model):
-        """Test that flat_to_params raises error for non-numeric input."""
-        wrong_flat = np.array(["a"] * default_spline_model.n_model_coeffs)
-
-        with pytest.raises(TypeError, match="beta must be numeric"):
-            default_spline_model.flat_to_params(wrong_flat)
-
-    def test_params_to_flat_validates_params(self, default_spline_model):
-        """Test that params_to_flat validates params."""
-        # Wrong shape should be caught by validate_params
-        wrong_params = np.random.randn(10, 10)
-
-        with pytest.raises(ValueError):
-            default_spline_model.params_to_flat(wrong_params)
 
 
 # ============================================================================
@@ -518,7 +435,7 @@ class TestSerialization:
         assert model_dict["temp_scale"] == 1.0
         assert model_dict["basis_order"] == 4
         assert "basis_size" in model_dict
-        assert model_dict["param_layout"] == "basis_major_high_to_low_temp_power"
+        assert "param_layout" not in model_dict
 
     def test_as_dict_custom(self, custom_spline_model):
         """Test as_dict with custom parameters."""
@@ -581,17 +498,17 @@ class TestParameterValidation:
         with pytest.raises(ValueError):
             default_spline_model.validate_params(wrong_params)
 
-    def test_validate_params_1d_array(self, default_spline_model):
-        """Test that validate_params rejects 1D array."""
-        wrong_params = np.random.randn(50)  # Should be 2D
+    def test_validate_params_wrong_length(self, default_spline_model):
+        """Test that validate_params rejects a 1D array of wrong length."""
+        wrong_params = np.random.randn(50)  # Wrong length (not n_model_coeffs)
 
         with pytest.raises(ValueError):
             default_spline_model.validate_params(wrong_params)
 
     def test_validate_params_non_numeric(self, default_spline_model):
         """Test that validate_params rejects non-numeric params."""
-        shape = default_spline_model.params_shape
-        params = np.array([["a"] * shape[1]] * shape[0])  # String array
+        n = default_spline_model.n_model_coeffs
+        params = np.array(["a"] * n)  # String array, correct length but wrong dtype
 
         with pytest.raises(TypeError):
             default_spline_model.validate_params(params)
@@ -612,10 +529,8 @@ class TestEquilibriumEvaluation:
         x = np.array([50.0, 100.0, 200.0])
         temp = np.array([160.0, 160.0, 160.0])
 
-        # Build design matrix and evaluate manually since evaluate expects flat params
         J = simple_spline_model.build_design_matrix(x, temp)
-        flat_params = simple_spline_model.params_to_flat(params)
-        y = J @ flat_params
+        y = J @ params
 
         assert y.shape == x.shape
         assert not np.any(np.isnan(y))
@@ -630,8 +545,7 @@ class TestEquilibriumEvaluation:
 
         # Via design matrix
         J = simple_spline_model.build_design_matrix(x, temp)
-        flat_params = simple_spline_model.params_to_flat(params)
-        y_matrix = J @ flat_params
+        y_matrix = J @ params
 
         # Both methods should give same result
         assert y_matrix.shape == x.shape
@@ -646,8 +560,7 @@ class TestEquilibriumEvaluation:
 
         # Via design matrix
         J = default_spline_model.build_design_matrix(x, temp)
-        flat_params = default_spline_model.params_to_flat(params)
-        y = J @ flat_params
+        y = J @ params
 
         # Same x but different temps should give different results
         assert y[0] != y[1]
@@ -662,8 +575,7 @@ class TestEquilibriumEvaluation:
 
         # Via design matrix
         J = default_spline_model.build_design_matrix(x, temp)
-        flat_params = default_spline_model.params_to_flat(params)
-        y = J @ flat_params
+        y = J @ params
 
         assert y.shape == (n,)
         assert not np.any(np.isnan(y))
@@ -834,4 +746,5 @@ class TestDifferentConfigurations:
         """Test model with high temperature degree."""
         model = SplineTempEqModel(temp_deg=10)
 
-        assert model.params_shape[1] == 11
+        assert model.params_shape == (model.n_model_coeffs,)
+        assert model.n_model_coeffs == model.basis_size * 11

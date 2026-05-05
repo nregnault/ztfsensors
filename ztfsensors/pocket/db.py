@@ -37,7 +37,7 @@ class EqFuncDb:
         - ccdid, qid: CCD and quadrant identifiers
         - mjd_start, mjd_end: MJD interval [start, end) for which params are valid
         - temp_min, temp_max: temperature range covered by the fit
-        - params: nested list of model parameters
+        - params: flat list of model parameters
     model : BaseEquilibriumModel
         The equilibrium model instance defining the functional form.
     """
@@ -156,8 +156,7 @@ class EqFuncDb:
             If parameters have incorrect shape or type.
         """
         row = self.select_row(ccdid=ccdid, qid=qid, mjd=mjd)
-        params = np.asarray(row["params"])
-        return self.model.validate_params(params)
+        return self.model.validate_params(np.asarray(row["params"]))
 
     def get_eq_func(
         self,

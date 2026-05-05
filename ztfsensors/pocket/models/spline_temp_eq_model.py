@@ -19,8 +19,8 @@ class SplineTempEqModel(BaseEquilibriumModel):
       - B_k are spline basis functions
       - P_k are polynomials in dT = T - temp_ref
 
-    Parameter matrix shape:
-        (basis_size, temp_deg + 1)
+    Parameter vector shape:
+        (basis_size * (temp_deg + 1),)
 
     Column ordering:
         [coeff for dT^deg, ..., coeff for dT, coeff for dT^0]
@@ -35,7 +35,6 @@ class SplineTempEqModel(BaseEquilibriumModel):
         "temp_scale",
         "basis_size",
         "basis_order",
-        "param_layout",
     )
 
     def __init__(
@@ -46,7 +45,6 @@ class SplineTempEqModel(BaseEquilibriumModel):
         temp_scale: float = 1.0,
         basis_order: int = 4,
         basis_size: int | None = None,
-        param_layout: str | None = None,
     ) -> None:
         """
         Initialize a spline-based temperature equilibrium model.
@@ -65,8 +63,6 @@ class SplineTempEqModel(BaseEquilibriumModel):
             Order of the B-spline basis (default: 4, cubic splines).
         basis_size : int, optional
             Expected number of basis functions. If provided, validated against computed size.
-        param_layout : str, optional
-            Parameter layout convention. If None, uses default 'basis_major_high_to_low_temp_power'.
 
         Raises
         ------
@@ -97,18 +93,12 @@ class SplineTempEqModel(BaseEquilibriumModel):
         self.temp_ref = float(temp_ref)
         self.temp_scale = float(temp_scale)
 
-        # Set param_layout with default if not provided
-        if param_layout is None:
-            self.param_layout = "basis_major_high_to_low_temp_power"
-        else:
-            self.param_layout = param_layout
-
         if self.temp_scale == 0:
             raise ValueError("temp_scale must be non-zero")
 
     @property
-    def params_shape(self) -> tuple[int, int]:
-        return (self.basis_size, self.temp_deg + 1)
+    def params_shape(self) -> tuple[int]:
+        return (self.n_model_coeffs,)
 
     @property
     def n_model_coeffs(self) -> int:
@@ -132,63 +122,6 @@ class SplineTempEqModel(BaseEquilibriumModel):
             Geometric grid from 50 to 10000 with 10 points.
         """
         return np.geomspace(50.0, 10000.0, 10)
-
-    def params_to_flat(self, params) -> np.ndarray:
-        """
-        Flatten 2D parameter matrix to 1D array.
-
-        The flattening is consistent with build_design_matrix() column ordering.
-
-        Parameters
-        ----------
-        params : array_like
-            Parameter matrix with shape (basis_size, temp_deg + 1).
-
-        Returns
-        -------
-        np.ndarray
-            Flat array with shape (basis_size * (temp_deg + 1),).
-            The ordering is: all basis coeffs for dT^deg, then dT^(deg-1), ..., then dT^0.
-
-        Raises
-        ------
-        ValueError
-            If params shape doesn't match (basis_size, temp_deg + 1).
-        """
-        params = self.validate_params(params)
-        return params.T.reshape(-1)
-
-    def flat_to_params(self, params) -> np.ndarray:
-        """
-        Reshape flat parameter array to 2D parameter matrix.
-
-        Inverse of params_to_flat().
-
-        Parameters
-        ----------
-        params : array_like
-            Flat parameter array with shape (n_model_coeffs,).
-
-        Returns
-        -------
-        np.ndarray
-            Parameter matrix with shape (basis_size, temp_deg + 1).
-
-        Raises
-        ------
-        ValueError
-            If flat array doesn't have correct length.
-        TypeError
-            If params are not numeric.
-        """
-        beta = np.asarray(params)
-        if beta.shape != (self.n_model_coeffs,):
-            raise ValueError(
-                f"Expected flat beta shape {(self.n_model_coeffs,)}, got {beta.shape}"
-            )
-        if not np.issubdtype(beta.dtype, np.number):
-            raise TypeError(f"beta must be numeric, got dtype={beta.dtype}")
-        return beta.reshape(self.temp_deg + 1, self.basis_size).T
 
     def build_design_matrix(self, x, ccd_temp) -> sparse.csr_matrix:
         """

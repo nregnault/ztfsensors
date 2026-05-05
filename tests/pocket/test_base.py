@@ -221,14 +221,6 @@ class TestBaseEquilibriumModel:
         with pytest.raises(TypeError, match="must be numeric"):
             dummy_model.validate_params(params)
 
-    def test_flat_to_params_default(self, dummy_model):
-        """Test default flat_to_params returns array as-is."""
-        params = np.array([1.0, 2.0])
-        result = dummy_model.flat_to_params(params)
-
-        assert isinstance(result, np.ndarray)
-        assert np.array_equal(result, params)
-
     def test_rescale_temp_with_attributes(self, dummy_model):
         """Test rescale_temp when model has temp_ref and temp_scale."""
         temp = np.array([160.0, 170.0, 150.0])

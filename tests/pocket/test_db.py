@@ -59,7 +59,9 @@ def sample_poly_model():
 @pytest.fixture
 def sample_db_data(sample_spline_model):
     """Create sample database data."""
-    params_shape = sample_spline_model.params_shape
+
+    def _flat(model):
+        return np.random.randn(*model.params_shape).tolist()
 
     records = [
         {
@@ -69,7 +71,7 @@ def sample_db_data(sample_spline_model):
             "mjd_end": 58100.0,
             "temp_min": 155.0,
             "temp_max": 165.0,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_spline_model),
         },
         {
             "ccdid": 1,
@@ -78,7 +80,7 @@ def sample_db_data(sample_spline_model):
             "mjd_end": 58200.0,
             "temp_min": 156.0,
             "temp_max": 166.0,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_spline_model),
         },
         {
             "ccdid": 1,
@@ -87,7 +89,7 @@ def sample_db_data(sample_spline_model):
             "mjd_end": 58150.0,
             "temp_min": 155.5,
             "temp_max": 165.5,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_spline_model),
         },
         {
             "ccdid": 2,
@@ -96,7 +98,7 @@ def sample_db_data(sample_spline_model):
             "mjd_end": 58100.0,
             "temp_min": 154.0,
             "temp_max": 164.0,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_spline_model),
         },
     ]
 
@@ -107,7 +109,9 @@ def sample_db_data(sample_spline_model):
 @pytest.fixture
 def sample_poly_db_data(sample_poly_model):
     """Create sample database data with poly model for get_eq_func tests."""
-    params_shape = sample_poly_model.params_shape
+
+    def _flat(model):
+        return np.random.randn(*model.params_shape).tolist()
 
     records = [
         {
@@ -117,7 +121,7 @@ def sample_poly_db_data(sample_poly_model):
             "mjd_end": 58100.0,
             "temp_min": 155.0,
             "temp_max": 165.0,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_poly_model),
         },
         {
             "ccdid": 1,
@@ -126,7 +130,7 @@ def sample_poly_db_data(sample_poly_model):
             "mjd_end": 58200.0,
             "temp_min": 156.0,
             "temp_max": 166.0,
-            "params": np.random.randn(*params_shape).tolist(),
+            "params": _flat(sample_poly_model),
         },
     ]
 
@@ -148,10 +152,8 @@ def sample_db_files(temp_dir, sample_spline_model, sample_db_data):
     # Write parquet file
     sample_db_data.write_parquet(prefix.with_suffix(".parquet"))
 
-    # Write YAML header
+    # Write YAML header (as_dict() already converts numpy arrays to lists)
     header = sample_spline_model.as_dict()
-    # Convert numpy arrays to lists for YAML serialization
-    header["basis_grid"] = header["basis_grid"].tolist()
     with prefix.with_suffix(".yaml").open("w") as f:
         yaml.safe_dump(header, f)
 
@@ -509,11 +511,10 @@ class TestDatabaseConsistency:
             assert row["params"] is not None
 
     def test_all_params_have_correct_shape(self, sample_db):
-        """Test that all stored params have correct shape."""
+        """Test that all stored params can be reconstructed to correct shape."""
         for row in sample_db.df.iter_rows(named=True):
-            params = np.array(row["params"])
-            validated = sample_db.model.validate_params(params)
-            assert validated.shape == sample_db.model.params_shape
+            params = sample_db.model.validate_params(np.asarray(row["params"]))
+            assert params.shape == sample_db.model.params_shape
 
     def test_mjd_intervals_valid(self, sample_db):
         """Test that all MJD intervals are valid (start < end)."""
@@ -545,8 +546,7 @@ class TestRoundTrip:
 
     def test_roundtrip_with_poly_model(self, temp_dir, sample_poly_model):
         """Test round-trip with polynomial model."""
-        # Create data - poly model has 1D params
-        params_shape = sample_poly_model.params_shape
+        # Create data - poly model has 1D params, stored flat in the DB.
         records = [
             {
                 "ccdid": 1,
@@ -555,8 +555,7 @@ class TestRoundTrip:
                 "mjd_end": 58100.0,
                 "temp_min": 155.0,
                 "temp_max": 165.0,
-                # Poly model params need to be wrapped in extra list for DataFrame
-                "params": np.random.randn(*params_shape).tolist(),
+                "params": np.random.randn(*sample_poly_model.params_shape).tolist(),
             }
         ]
         df = pl.DataFrame(records)
@@ -605,7 +604,6 @@ class TestEdgeCases:
 
     def test_single_record(self, sample_spline_model):
         """Test database with single record."""
-        params_shape = sample_spline_model.params_shape
         df = pl.DataFrame(
             [
                 {
@@ -615,7 +613,9 @@ class TestEdgeCases:
                     "mjd_end": 58100.0,
                     "temp_min": 155.0,
                     "temp_max": 165.0,
-                    "params": np.random.randn(*params_shape).tolist(),
+                    "params": np.random.randn(
+                        *sample_spline_model.params_shape
+                    ).tolist(),
                 }
             ]
         )
@@ -627,7 +627,6 @@ class TestEdgeCases:
 
     def test_many_ccds(self, sample_spline_model):
         """Test database with many CCDs."""
-        params_shape = sample_spline_model.params_shape
         records = []
         for ccdid in range(1, 17):  # 16 CCDs
             for qid in range(1, 5):  # 4 quadrants
@@ -639,7 +638,9 @@ class TestEdgeCases:
                         "mjd_end": 58100.0,
                         "temp_min": 155.0,
                         "temp_max": 165.0,
-                        "params": np.random.randn(*params_shape).tolist(),
+                        "params": np.random.randn(
+                            *sample_spline_model.params_shape
+                        ).tolist(),
                     }
                 )
 
@@ -652,7 +653,6 @@ class TestEdgeCases:
 
     def test_large_mjd_value(self, sample_db):
         """Test with very large MJD values."""
-        # Add record with large MJD
         new_record = {
             "ccdid": 1,
             "qid": 1,
