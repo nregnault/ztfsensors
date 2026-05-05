@@ -64,9 +64,12 @@ def load(
             (pl.col("median") - pl.col("pedestal_avg")).first().alias("skylev"),
             pl.col("pedestal_avg").first(),
             pl.col("pedestal1").first(),
-            (pl.col("overscan_val") - pl.col("pedestal_avg"))
-            .sum()
-            .alias("overscan_sum"),
+            (
+                (pl.col("overscan_val") - pl.col("pedestal_avg"))
+                .filter(pl.col("j_overscan") >= 0)
+                .sum()
+                .alias("overscan_sum")
+            ),
             (pl.col("last_val") - pl.col("pedestal_avg"))
             .median()
             .alias("last_col_skylev"),
