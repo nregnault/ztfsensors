@@ -125,6 +125,13 @@ class EqFuncDb:
 
         return rows.to_dicts()[0]
 
+    def get_temperature_range(
+        self, ccdid: int, qid: int, mjd: float
+    ) -> tuple[float, float]:
+        """ """
+        r = self.select_row(ccdid, qid, mjd)
+        return r["temp_min"], r["temp_max"]
+
     def get_params(
         self,
         ccdid: int,
