@@ -13,8 +13,9 @@ import yaml
 from astropy.time import Time
 
 from ztfsensors.pocket import FitResults, fit_eq_model
+from ztfsensors.pocket.db import EqFuncDb
 from ztfsensors.pocket.models import PolyTempEqModel, SplineTempEqModel
-from ztfsensors.pocket.plots import FitGallery, FitGalleryItem
+from ztfsensors.pocket.plots import EqFuncGallery, FitGallery, FitGalleryItem
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 
@@ -529,6 +530,21 @@ Examples:
 
     global_fits.save(output_dir / "eq_db")
     logging.info(f"Global eq_db saved to {output_dir / 'eq_db'}")
+
+    # Générer la galerie des fonctions d'équilibre tabulées
+    logging.info("\n" + "=" * 60)
+    logging.info("Generating eq_func gallery...")
+    logging.info("=" * 60)
+
+    eq_db = EqFuncDb.open(output_dir / "eq_db")
+    eq_func_gallery = EqFuncGallery(eq_db)
+    eq_func_gallery_dir = output_dir / "eq_func_gallery"
+    eq_func_gallery.save_all(eq_func_gallery_dir, close_figures=True)
+    eq_func_gallery.write_html(
+        eq_func_gallery_dir / "index.html",
+        title="Equilibrium Function Gallery",
+    )
+    logging.info(f"Eq func gallery saved to {eq_func_gallery_dir / 'index.html'}")
 
     # Générer la galerie HTML globale avec toutes les plages MJD
     logging.info("\n" + "=" * 60)
