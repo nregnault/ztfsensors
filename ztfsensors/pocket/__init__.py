@@ -4,6 +4,10 @@ from .db import EqFuncDb
 from .fit import FitDiagnostics, FitRecord, FitResults, fit_eq_model
 from .pix_distortion import invert, plot_1d, plot_2d, predict
 
+# the correction function is called "correct_pixels" in ztfimg
+# better stick to that name
+correct_pixels = invert
+
 
 def load_db(prefix: "str | Path | None" = None) -> EqFuncDb:
     """Load an equilibrium-function database.

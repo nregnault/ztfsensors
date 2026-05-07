@@ -96,7 +96,6 @@ def plot_1d(
     Correction on 1D pixels.
     """
     import matplotlib.pyplot as plt
-
     import sims
 
     key = jax.random.PRNGKey(seed)
@@ -187,7 +186,6 @@ def plot_2d(
     Correction on 2D pixels.
     """
     import matplotlib.pyplot as plt
-
     import sims
 
     key = jax.random.PRNGKey(seed)
