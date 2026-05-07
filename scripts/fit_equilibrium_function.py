@@ -14,6 +14,7 @@ from astropy.time import Time
 
 from ztfsensors.pocket import FitResults, fit_eq_model
 from ztfsensors.pocket.db import EqFuncDb
+from ztfsensors.pocket.fit import FitDiagnosticsDb
 from ztfsensors.pocket.models import PolyTempEqModel, SplineTempEqModel
 from ztfsensors.pocket.plots import EqFuncGallery, FitGallery, FitGalleryItem
 
@@ -68,12 +69,12 @@ def load(
             # in the early days of the ZTF survey (before 2018-11)
             # the overscans are only 29 column-wide.
             (
-                (pl.col("overscan_val") - pl.col("pedestal_avg"))
+                (pl.col("overscan_val") - pl.col("pedestal1"))  # was pedestal_avg
                 .filter(pl.col("j_overscan") >= 0)
                 .sum()
                 .alias("overscan_sum")
             ),
-            (pl.col("last_val") - pl.col("pedestal_avg"))
+            (pl.col("last_val") - pl.col("pedestal1"))  # was pedestal_avg
             .median()
             .alias("last_col_skylev"),
         ]
@@ -392,6 +393,7 @@ Examples:
     # Process each MJD range
     global_fits = FitResults(model=eq_model)  # eq_db globale, unique
     global_gallery = FitGallery()  # Galerie globale pour l'index HTML final
+    global_diags: list = []  # Tous les FitDiagnostics, pour FitDiagnosticsDb
 
     for mjd_idx, (mjd_start, mjd_end) in enumerate(mjd_ranges):
         logging.info(f"\n{'=' * 60}")
@@ -432,6 +434,7 @@ Examples:
 
                 fits.append(record)
                 global_fits.append(record)
+                global_diags.append(diag)
                 gallery.add(diag)
 
         # Save results for this MJD range
@@ -530,6 +533,14 @@ Examples:
 
     global_fits.save(output_dir / "eq_db")
     logging.info(f"Global eq_db saved to {output_dir / 'eq_db'}")
+
+    # Sauvegarder les diagnostics de fit (données brutes + résidus + bads)
+    logging.info("\n" + "=" * 60)
+    logging.info("Saving fit diagnostics...")
+    logging.info("=" * 60)
+
+    FitDiagnosticsDb.from_diagnostics(global_diags).save(output_dir / "eq_diag.parquet")
+    logging.info(f"Fit diagnostics saved to {output_dir / 'eq_diag.parquet'}")
 
     # Générer la galerie des fonctions d'équilibre tabulées
     logging.info("\n" + "=" * 60)

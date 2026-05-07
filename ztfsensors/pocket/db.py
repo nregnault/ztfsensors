@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Directory that ships with the package and holds the bundled eq_db files.
+_BUNDLED_DATA_DIR = Path(__file__).parent / "data"
+_BUNDLED_DB_PREFIX = _BUNDLED_DATA_DIR / "eq_db"
 
 import numpy as np
 import polars as pl
@@ -40,10 +44,29 @@ class EqFuncDb:
         - params: flat list of model parameters
     model : BaseEquilibriumModel
         The equilibrium model instance defining the functional form.
+    bad_images : pl.DataFrame or None
+        Optional DataFrame of outlier images identified during fitting, with
+        columns ``(filefracday, fieldid, filterid, ccdid, qid, mjd_start, mjd_end)``.
+        Loaded automatically from ``<prefix>_bads.parquet`` by :meth:`open` when
+        the file exists.  ``None`` when not available.
     """
 
     df: pl.DataFrame
     model: BaseEquilibriumModel
+    bad_images: pl.DataFrame | None = None
+    # Frozen set of (filefracday, ccdid, qid) tuples for O(1) is_bad() lookups.
+    # Built lazily in __post_init__ from bad_images.
+    _bad_set: frozenset = field(
+        default_factory=frozenset, init=False, repr=False, compare=False
+    )
+
+    def __post_init__(self) -> None:
+        if self.bad_images is not None and self.bad_images.height > 0:
+            self._bad_set = frozenset(
+                self.bad_images.select(["filefracday", "ccdid", "qid"]).iter_rows()
+            )
+        else:
+            self._bad_set = frozenset()
 
     @classmethod
     def open(
@@ -75,7 +98,11 @@ class EqFuncDb:
             _validate_model_header(model, header)
 
         df = pl.read_parquet(prefix.with_suffix(".parquet"))
-        return cls(df=df, model=model)
+
+        bads_path = prefix.parent / (prefix.stem + "_bads.parquet")
+        bad_images = pl.read_parquet(bads_path) if bads_path.exists() else None
+
+        return cls(df=df, model=model, bad_images=bad_images)
 
     def select_row(
         self,
@@ -124,6 +151,130 @@ class EqFuncDb:
             )
 
         return rows.to_dicts()[0]
+
+    # ------------------------------------------------------------------
+    # Convenience class-level factory
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def load(cls, prefix: str | Path | None = None) -> "EqFuncDb":
+        """Load an equilibrium-function database.
+
+        Parameters
+        ----------
+        prefix :
+            Path *without extension* to the database files
+            (``<prefix>.yaml`` and ``<prefix>.parquet`` must exist, and
+            optionally ``<prefix>_bads.parquet``).
+            When *not* given (or ``None``), the database bundled with the
+            ``ztfsensors`` package is loaded from
+            ``ztfsensors/pocket/data/eq_db.*``.
+
+        Returns
+        -------
+        EqFuncDb
+
+        Raises
+        ------
+        FileNotFoundError
+            If the requested database files cannot be found.
+
+        Examples
+        --------
+        Load the bundled (default) database::
+
+            import ztfsensors.pocket as pocket
+            db = pocket.load_db()
+
+        Load a custom database::
+
+            db = pocket.load_db("path/to/my_eq_db")
+        """
+        if prefix is None:
+            prefix = _BUNDLED_DB_PREFIX
+            yaml_path = prefix.with_suffix(".yaml")
+            parquet_path = prefix.with_suffix(".parquet")
+            if not yaml_path.exists() or not parquet_path.exists():
+                raise FileNotFoundError(
+                    "No bundled equilibrium-function database was found at\n"
+                    f"  {yaml_path}\n"
+                    f"  {parquet_path}\n"
+                    "Please generate the database with `fit_equilibrium_function.py` "
+                    "and copy the output files to that location, or pass an explicit "
+                    "`prefix` to `load_db()`.\n"
+                    "See ztfsensors/pocket/data/README.md for details."
+                )
+        return cls.open(prefix)
+
+    def is_bad(
+        self,
+        filefracday: int,
+        ccdid: int,
+        qid: int,
+    ) -> bool:
+        """
+        Check whether an image is flagged as an outlier for a given CCD/quadrant.
+
+        Parameters
+        ----------
+        filefracday :
+            Unique image identifier.
+        ccdid :
+            CCD identifier.
+        qid :
+            Quadrant identifier.
+
+        Returns
+        -------
+        bool
+            ``True`` if the image was rejected as an outlier during the
+            equilibrium fit for ``(ccdid, qid)``; ``False`` otherwise
+            (including when no bad-images table is available).
+        """
+        return (int(filefracday), int(ccdid), int(qid)) in self._bad_set
+
+    def get_bad_images(
+        self,
+        ccdid: int | None = None,
+        qid: int | None = None,
+    ) -> pl.DataFrame:
+        """
+        Return the bad-images table, optionally filtered by CCD and quadrant.
+
+        Parameters
+        ----------
+        ccdid :
+            If given, keep only rows for this CCD.
+        qid :
+            If given, keep only rows for this quadrant.
+
+        Returns
+        -------
+        pl.DataFrame
+            Filtered (or full) bad-images DataFrame.  Empty when
+            :attr:`bad_images` is ``None``.
+        """
+        if self.bad_images is None:
+            return pl.DataFrame(
+                schema={
+                    "filefracday": pl.Int64,
+                    "fieldid": pl.Int32,
+                    "filterid": pl.Int16,
+                    "mjd": pl.Float64,
+                    "skylev": pl.Float64,
+                    "overscan_sum": pl.Float64,
+                    "ccdid": pl.Int16,
+                    "qid": pl.Int16,
+                    "mjd_start": pl.Float64,
+                    "mjd_end": pl.Float64,
+                }
+            )
+        df = self.bad_images
+        if ccdid is not None:
+            df = df.filter(pl.col("ccdid") == int(ccdid))
+        if qid is not None:
+            df = df.filter(pl.col("qid") == int(qid))
+        return df
 
     def get_temperature_range(
         self, ccdid: int, qid: int, mjd: float

@@ -19,6 +19,53 @@ from sksparse import cholmod
 
 from .models.base import BaseEquilibriumModel
 
+# ---------------------------------------------------------------------------
+# Bad-images schema
+# ---------------------------------------------------------------------------
+
+# Columns extracted from the training DataFrame to identify bad images.
+# Only columns that actually exist in the input DataFrame are kept.
+_BAD_IMAGE_WANT_COLS = (
+    "filefracday",
+    "fieldid",
+    "filterid",
+    "mjd",
+    "skylev",
+    "overscan_sum",
+)
+
+_BAD_IMAGES_SCHEMA: dict = {
+    "filefracday": pl.Int64,
+    "fieldid": pl.Int32,
+    "filterid": pl.Int16,
+    "mjd": pl.Float64,
+    "skylev": pl.Float64,
+    "overscan_sum": pl.Float64,
+    "ccdid": pl.Int16,
+    "qid": pl.Int16,
+    "mjd_start": pl.Float64,
+    "mjd_end": pl.Float64,
+}
+
+# ---------------------------------------------------------------------------
+# Diagnostics schema
+# ---------------------------------------------------------------------------
+
+_DIAG_SCHEMA: dict = {
+    "ccdid": pl.Int16,
+    "qid": pl.Int16,
+    "mjd_start": pl.Float64,
+    "mjd_end": pl.Float64,
+    "xx": pl.List(pl.Float64),
+    "yy": pl.List(pl.Float64),
+    "temp": pl.List(pl.Float64),
+    "mjd": pl.List(pl.Float64),
+    "yhat": pl.List(pl.Float64),
+    "resid": pl.List(pl.Float64),
+    "bads": pl.List(pl.Boolean),
+    # bads[i] = True  →  observation i is an outlier (rejected by robust fit)
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +102,17 @@ class FitRecord:
     temp_min: float
     temp_max: float
     params: np.ndarray
+    bad_images: pl.DataFrame | None = field(
+        default=None,
+        compare=False,
+        hash=False,
+        repr=False,
+    )
+    """
+    DataFrame of outlier images identified during the robust fit, with
+    columns ``(filefracday, fieldid, filterid, ccdid, qid, mjd_start, mjd_end)``.
+    ``None`` when no outlier detection was performed or no bad images were found.
+    """
 
     def validate(self, model: BaseEquilibriumModel) -> np.ndarray:
         """
@@ -110,6 +168,27 @@ class FitResults:
 
     model: BaseEquilibriumModel
     records: list[FitRecord] = field(default_factory=list)
+
+    def bad_images_to_dataframe(self) -> pl.DataFrame:
+        """
+        Collect bad-image records from all fits into a single DataFrame.
+
+        Returns
+        -------
+        pl.DataFrame
+            Concatenation of all ``record.bad_images`` DataFrames, with
+            schema ``_BAD_IMAGES_SCHEMA``.  Returns an empty DataFrame with
+            that schema when no bad images have been recorded.
+        """
+        empty = pl.DataFrame(schema=_BAD_IMAGES_SCHEMA)
+        parts = [
+            rec.bad_images
+            for rec in self.records
+            if rec.bad_images is not None and rec.bad_images.height > 0
+        ]
+        if not parts:
+            return empty
+        return pl.concat([empty] + parts)
 
     def append(self, record: FitRecord) -> None:
         """
@@ -243,6 +322,9 @@ class FitResults:
         self.validate()
 
         self.to_dataframe().write_parquet(prefix.with_suffix(".parquet"))
+
+        bads_path = prefix.parent / (prefix.stem + "_bads.parquet")
+        self.bad_images_to_dataframe().write_parquet(bads_path)
 
         # header = {
         #     "model_name": self.model.MODEL_NAME,
@@ -416,6 +498,199 @@ class FitDiagnostics:
 
         return plot_equilibrium_fit(self, **kwargs)
 
+    def to_row(self) -> dict:
+        """
+        Serialise this diagnostics object to a dictionary suitable for
+        building a :class:`FitDiagnosticsDb` row.
+
+        ``bads_`` is stored as an explicit boolean array (all-``False`` when
+        no outlier detection was performed, meaning every observation is good).
+
+        Returns
+        -------
+        dict
+            Keys matching :data:`_DIAG_SCHEMA`.
+        """
+        bads = self.bads_.tolist() if self.bads_ is not None else [False] * len(self.xx)
+        return {
+            "ccdid": self.record.ccdid,
+            "qid": self.record.qid,
+            "mjd_start": self.record.mjd_start,
+            "mjd_end": self.record.mjd_end,
+            "xx": self.xx.tolist(),
+            "yy": self.yy.tolist(),
+            "temp": self.temp.tolist(),
+            "mjd": self.mjd.tolist(),
+            "yhat": self.yhat.tolist(),
+            "resid": self.resid.tolist(),
+            "bads": bads,
+        }
+
+
+@dataclass
+class FitDiagnosticsDb:
+    """
+    Persistent store for :class:`FitDiagnostics` data.
+
+    Each row of the underlying DataFrame corresponds to one fit
+    ``(ccdid, qid, mjd_start, mjd_end)`` and contains the full arrays of
+    sky-level values, overscan signals, temperatures, MJDs, model
+    predictions, residuals, and outlier flags.
+
+    Typical usage
+    -------------
+    Save after a fitting run::
+
+        diag_db = FitDiagnosticsDb.from_diagnostics(all_diags)
+        diag_db.save(output_dir / "eq_diag.parquet")
+
+    Reload and replot later::
+
+        from ztfsensors.pocket.db import EqFuncDb
+        eq_db   = EqFuncDb.open(output_dir / "eq_db")
+        diag_db = FitDiagnosticsDb.open(output_dir / "eq_diag.parquet")
+        diag    = diag_db.load_fit(ccdid=6, qid=1, mjd_start=58400., eq_db=eq_db)
+        fig, _  = diag.plot()
+    """
+
+    df: pl.DataFrame
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_diagnostics(cls, diags: list[FitDiagnostics]) -> "FitDiagnosticsDb":
+        """
+        Build a :class:`FitDiagnosticsDb` from a list of
+        :class:`FitDiagnostics` objects.
+
+        Parameters
+        ----------
+        diags :
+            Diagnostics produced by :func:`fit_eq_model`.
+
+        Returns
+        -------
+        FitDiagnosticsDb
+        """
+        empty = pl.DataFrame(schema=_DIAG_SCHEMA)
+        if not diags:
+            return cls(df=empty)
+        return cls(
+            df=pl.concat(
+                [empty, pl.DataFrame([d.to_row() for d in diags], schema=_DIAG_SCHEMA)]
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save(self, path: str | Path) -> None:
+        """
+        Write the diagnostics to a Parquet file.
+
+        Parameters
+        ----------
+        path :
+            Output path (created with parent directories if absent).
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.df.write_parquet(path)
+
+    @classmethod
+    def open(cls, path: str | Path) -> "FitDiagnosticsDb":
+        """
+        Load a previously saved diagnostics store.
+
+        Parameters
+        ----------
+        path :
+            Path to a Parquet file written by :meth:`save`.
+        """
+        return cls(df=pl.read_parquet(path))
+
+    # ------------------------------------------------------------------
+    # Access
+    # ------------------------------------------------------------------
+
+    def load_fit(
+        self,
+        ccdid: int,
+        qid: int,
+        mjd_start: float,
+        eq_db,
+    ) -> FitDiagnostics:
+        """
+        Reconstruct a :class:`FitDiagnostics` for a specific fit.
+
+        The data arrays come from this store; the model and fit record
+        (parameters, temperature range, …) are looked up in *eq_db*.
+
+        Parameters
+        ----------
+        ccdid :
+            CCD identifier.
+        qid :
+            Quadrant identifier.
+        mjd_start :
+            Start of the MJD validity interval for the desired fit.
+        eq_db :
+            :class:`~ztfsensors.pocket.db.EqFuncDb` instance that holds the
+            corresponding model and parameters.
+
+        Returns
+        -------
+        FitDiagnostics
+
+        Raises
+        ------
+        KeyError
+            If no diagnostics row matches ``(ccdid, qid, mjd_start)``.
+        """
+        rows = self.df.filter(
+            (pl.col("ccdid") == int(ccdid))
+            & (pl.col("qid") == int(qid))
+            & (pl.col("mjd_start") == float(mjd_start))
+        )
+        if rows.height == 0:
+            raise KeyError(
+                f"No diagnostics for ccdid={ccdid}, qid={qid}, mjd_start={mjd_start}"
+            )
+        if rows.height > 1:
+            raise ValueError(
+                f"Multiple diagnostic rows for ccdid={ccdid}, qid={qid}, "
+                f"mjd_start={mjd_start}"
+            )
+        row = rows.row(0, named=True)
+
+        # Reconstruct the FitRecord from eq_db (avoids duplicating params)
+        eq_row = eq_db.select_row(ccdid=ccdid, qid=qid, mjd=mjd_start)
+        record = FitRecord(
+            ccdid=int(eq_row["ccdid"]),
+            qid=int(eq_row["qid"]),
+            mjd_start=float(eq_row["mjd_start"]),
+            mjd_end=float(eq_row["mjd_end"]),
+            temp_min=float(eq_row["temp_min"]),
+            temp_max=float(eq_row["temp_max"]),
+            params=eq_db.model.validate_params(np.asarray(eq_row["params"])),
+        )
+
+        bads = np.asarray(row["bads"])
+        return FitDiagnostics(
+            model=eq_db.model,
+            record=record,
+            xx=np.asarray(row["xx"]),
+            yy=np.asarray(row["yy"]),
+            temp=np.asarray(row["temp"]),
+            mjd=np.asarray(row["mjd"]),
+            yhat=np.asarray(row["yhat"]),
+            resid=np.asarray(row["resid"]),
+            bads_=bads if bads.any() else None,
+        )
+
 
 def fit_eq_model(
     df,
@@ -515,14 +790,37 @@ def fit_eq_model(
         # chi2 = solver.chi2
         # ndof = solver.ndof()
 
+    _mjd_start = mjd_start if mjd_start is not None else float(ddf["mjd"].min())
+    _mjd_end = mjd_end if mjd_end is not None else float(ddf["mjd"].max()) + 1.0
+
+    # Extract bad-image metadata from the training DataFrame.
+    bad_images: pl.DataFrame | None = None
+    if bads is not None and bads.any():
+        keep_cols = [c for c in _BAD_IMAGE_WANT_COLS if c in ddf.columns]
+        if keep_cols:
+            bad_rows = ddf.filter(pl.Series("_bads", bads)).select(keep_cols)
+            bad_images = bad_rows.with_columns(
+                pl.lit(ccdid).cast(pl.Int16).alias("ccdid"),
+                pl.lit(qid).cast(pl.Int16).alias("qid"),
+                pl.lit(_mjd_start).alias("mjd_start"),
+                pl.lit(_mjd_end).alias("mjd_end"),
+            ).cast(
+                {
+                    c: t
+                    for c, t in _BAD_IMAGES_SCHEMA.items()
+                    if c in bad_rows.columns + ["ccdid", "qid", "mjd_start", "mjd_end"]
+                }
+            )
+
     record = FitRecord(
         ccdid=ccdid,
         qid=qid,
-        mjd_start=mjd_start if mjd_start is not None else float(ddf["mjd"].min()),
-        mjd_end=mjd_end if mjd_end is not None else float(ddf["mjd"].max()) + 1.0,
+        mjd_start=_mjd_start,
+        mjd_end=_mjd_end,
         temp_min=ddf["cryotemp"].min(),
         temp_max=ddf["cryotemp"].max(),
         params=np.asarray(params),
+        bad_images=bad_images,
     )
 
     diag = FitDiagnostics.from_fit_data(
