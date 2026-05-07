@@ -1,0 +1,13 @@
+model_name: poly_temp_eq
+model_version: v1
+mjd_interval_convention: '[start, end)'
+p_deg:
+- 2
+- 2
+- 2
+q_deg:
+- 3
+- 3
+x_knot: 200.0
+temp_ref: 160.0
+temp_scale: 1.0
