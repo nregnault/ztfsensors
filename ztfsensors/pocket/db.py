@@ -362,3 +362,75 @@ class EqFuncDb:
             ccd_temp=ccd_temp,
             tabulation_grid=tabulation_grid,
         )
+
+    # ------------------------------------------------------------------
+    # Gallery
+    # ------------------------------------------------------------------
+
+    def save_gallery(
+        self,
+        output_dir: str | Path,
+        index_html: str | Path | None = None,
+        title: str = "Equilibrium Function Gallery",
+        thumb_width: int = 250,
+        **plot_kwargs,
+    ):
+        """Generate and save a gallery of equilibrium-function plots.
+
+        Creates one plot per row in the database (one per CCD/quadrant/MJD
+        block) showing the equilibrium function evaluated at several
+        temperatures, then writes a browsable HTML index.
+
+        Parameters
+        ----------
+        output_dir :
+            Directory where the PNG images are saved.  Created if absent.
+        index_html :
+            Path of the HTML index file.  Defaults to
+            ``<output_dir>/index.html``.
+        title :
+            Page title of the HTML gallery.
+        thumb_width :
+            Width (in pixels) of thumbnails in the HTML page.
+        **plot_kwargs :
+            Extra keyword arguments forwarded to
+            :func:`~ztfsensors.pocket.plots.plot_tabulated_eq_func`
+            (e.g. ``n_temps``, ``flux_min``, ``flux_max``, ``xscale``,
+            ``cmap_name``, ``figsize``).
+
+        Returns
+        -------
+        EqFuncGallery
+            The gallery object (its ``.items`` attribute lists every saved
+            plot as a :class:`~ztfsensors.pocket.plots.GalleryItem`).
+
+        Examples
+        --------
+        ::
+
+            import ztfsensors.pocket as pocket
+
+            db = pocket.load_db()
+            db.save_gallery("my_gallery")              # -> my_gallery/index.html
+
+            # Customise the plots
+            db.save_gallery(
+                "my_gallery",
+                n_temps=7,
+                flux_min=10,
+                flux_max=10_000,
+                xscale="log",
+            )
+        """
+        # Lazy import to avoid the circular dependency
+        # (eq_plots.py already imports EqFuncDb at the top level).
+        from .plots.eq_plots import EqFuncGallery
+
+        output_dir = Path(output_dir)
+        if index_html is None:
+            index_html = output_dir / "index.html"
+
+        gallery = EqFuncGallery(self)
+        gallery.save_all(output_dir, close_figures=True, **plot_kwargs)
+        gallery.write_html(Path(index_html), title=title, thumb_width=thumb_width)
+        return gallery
