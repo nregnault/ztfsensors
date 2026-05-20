@@ -778,7 +778,7 @@ def fit_eq_model(
         # We better perform a robust fit here.
         H = J.T @ J
         rhs = J.T @ yy
-        fact = cholmod.cholesky(H, beta=beta)
+        fact = cholmod.cholesky(H.tocsc(), beta=beta)
         params = fact(rhs)
     else:
         J = J.tocoo()
