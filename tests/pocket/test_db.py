@@ -441,13 +441,16 @@ class TestGetEqFunc:
     """Test the get_eq_func method."""
 
     def test_get_eq_func_returns_jax_func(self, sample_poly_db):
-        """Test that get_eq_func returns JaxEqFunc."""
-        # Use a simple grid to avoid dimension issues
+        """Test that get_eq_func with backend='jax' returns JaxEqFunc."""
         grid = np.array([50.0, 100.0, 500.0, 1000.0])
         eq_func = sample_poly_db.get_eq_func(
-            ccdid=1, qid=1, mjd=58050.0, ccd_temp=160.0, tabulation_grid=grid
+            ccdid=1,
+            qid=1,
+            mjd=58050.0,
+            ccd_temp=160.0,
+            tabulation_grid=grid,
+            backend="jax",
         )
-
         assert isinstance(eq_func, JaxEqFunc)
 
     def test_get_eq_func_evaluates(self, sample_poly_db):
@@ -483,12 +486,25 @@ class TestGetEqFunc:
     def test_get_eq_func_custom_grid(self, sample_poly_db):
         """Test get_eq_func with custom tabulation grid."""
         custom_grid = np.array([50.0, 100.0, 500.0, 1000.0])
-
         eq_func = sample_poly_db.get_eq_func(
-            ccdid=1, qid=1, mjd=58050.0, ccd_temp=160.0, tabulation_grid=custom_grid
+            ccdid=1,
+            qid=1,
+            mjd=58050.0,
+            ccd_temp=160.0,
+            tabulation_grid=custom_grid,
+            backend="jax",
         )
-
         assert isinstance(eq_func, JaxEqFunc)
+
+    def test_get_eq_func_default_returns_numpy_func(self, sample_poly_db):
+        """Test that get_eq_func default (no backend arg) returns NumpyEqFunc."""
+        from ztfsensors.pocket.models.base import NumpyEqFunc
+
+        grid = np.array([50.0, 100.0, 500.0, 1000.0])
+        eq_func = sample_poly_db.get_eq_func(
+            ccdid=1, qid=1, mjd=58050.0, ccd_temp=160.0, tabulation_grid=grid
+        )
+        assert isinstance(eq_func, NumpyEqFunc)
 
     def test_get_eq_func_no_match(self, sample_poly_db):
         """Test that get_eq_func raises error for non-existent entry."""
