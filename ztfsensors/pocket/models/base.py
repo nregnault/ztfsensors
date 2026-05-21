@@ -117,7 +117,9 @@ class NumpyEqFunc:
         """
         x_arr = np.asarray(x, dtype=np.float32)
         x_clipped = np.clip(x_arr, self.x_grid[0], self.x_max)
-        return np.interp(x_clipped, self.x_grid, self.y_grid)
+        # np.interp always returns float64 regardless of input dtypes; cast back
+        # to float32 to match JaxEqFunc's behaviour and keep invert_numpy in f32.
+        return np.interp(x_clipped, self.x_grid, self.y_grid).astype(np.float32)
 
 
 class BaseEquilibriumModel(ABC):
