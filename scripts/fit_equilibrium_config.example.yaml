@@ -1,0 +1,67 @@
+# Example configuration file for fit_equilibrium_function.py
+#
+# Usage:
+#   ./fit_equilibrium_function.py --config fit_equilibrium_config.yaml
+#
+# Or generate a config from current command-line args:
+#   ./fit_equilibrium_function.py --mjd-range 2019-10-23:2019-12-31 --save-config my_config.yaml
+
+# Input data file
+input: /home/nrl/lemaitre/ztf-sensor-analysis/pocket/training/data/pocket_training_all_fields.parquet
+
+# Output directory for results (database + gallery)
+output_dir: prod
+
+# Equilibrium model type: 'poly' or 'spline'
+model: poly
+
+# Number of knots for spline model (only used if model: spline)
+spline_knots: 7
+
+# CCD IDs to process
+# Examples: "1-16", "1,3,5", "6"
+ccdids: "1-16"
+
+# Quadrant IDs to process
+# Examples: "1-4", "1,3", "1"
+qids: "1"
+
+# Matplotlib backend mode
+# Options: 'auto', 'interactive', 'agg'
+#   - 'auto': use default backend
+#   - 'interactive': force GUI backend (TkAgg or Qt5Agg)
+#   - 'agg': non-interactive, for headless servers
+backend: auto
+
+# Plot display options
+# show_plots: Display plots interactively (implies no_close_figures)
+show_plots: false
+
+# pause_after_each: Pause and wait for user input after each plot
+#   Press Enter to continue, or 'q' + Enter to skip remaining plots
+pause_after_each: false
+
+# no_close_figures: Keep figures in memory after saving
+#   Useful for post-processing in notebooks or interactive sessions
+no_close_figures: false
+
+# MJD ranges to process
+# Each range is defined by a start and end MJD
+# The script will create separate outputs for each range
+mjd_ranges:
+  - start: 58413.0 # 2019-10-23
+    end: 58483.0 # 2019-12-31
+
+
+  # Uncomment to add more ranges:
+  # - start: 58849.0  # 2020-01-01
+  #   end: 59215.0    # 2020-12-31
+
+  # - start: 59580.0  # 2022-01-01
+  #   end: 59945.0    # 2022-12-31
+
+# Alternative: Single MJD range
+# If you uncomment this, comment out 'mjd_ranges' above
+# mjd_range:
+#   start: 58413.0
+#   end: 58483.0

@@ -1,20 +1,20 @@
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
+__version__ = "0.1.3"
 
-__version__ = '0.1.3'
 
-
-# there is some compiled code
+# there is some compiled code (deprecated module)
 ext_modules = [
-    Pybind11Extension("ztfsensors._pocket",
-                      ["ztfsensors/_pocket.cpp"],
-                      define_macros = [('VERSION_INFO', __version__)],
-                      ),
-    ]
+    Pybind11Extension(
+        "ztfsensors.deprecated._pocket",
+        ["ztfsensors/deprecated/_pocket.cpp"],
+        define_macros=[("VERSION_INFO", __version__)],
+    ),
+]
 
 setup(
-    name='ztfsensors',
+    name="ztfsensors",
     version=__version__,
     # author="Nicolas Regnault",
     # author_email="nicolas.regnault@lpnhe.in2p3.fr",

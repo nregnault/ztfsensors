@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# DEPRECATED
+# this is the first version of the pocket correction.
+# DEPRECATED
+
 import logging
 import os
 import time
@@ -29,10 +33,10 @@ with open(CORRECTION_FILEPATH) as f:
     POCKET_PARAMETERS = pandas.DataFrame(data["data"]).set_index(["ccdid", "qid"])
 
 
-def get_config(ccdid=None, qid=None,
-               pixels=None, n_overscan=None,
-                   use_global_parameters=True):
-    """ returns the pocket effect parameter configuration for the given quadrant """
+def get_config(
+    ccdid=None, qid=None, pixels=None, n_overscan=None, use_global_parameters=True
+):
+    """returns the pocket effect parameter configuration for the given quadrant"""
     # This is a patch currently
     if use_global_parameters:
         pocket_config = POCKET_PARAMETERS.loc[ccdid, qid]
@@ -42,13 +46,14 @@ def get_config(ccdid=None, qid=None,
 
     return pocket_config
 
+
 def fit_pocket_config(pixels=None, n_overscan=30):
     """ """
     # Nicolas, this is here.
     return None
-    
-class PocketModel():
 
+
+class PocketModel:
     def __init__(self, alpha, cmax, beta, nmax):
         """
         cmax: float
@@ -69,17 +74,15 @@ class PocketModel():
         self._beta = beta
         self._nmax = nmax
 
-
     # ============= #
     #   Top level   #
     # ============= #
-
 
     # ============= #
     #  Model func   #
     # ============= #
     def flush(self, pocket_q):
-        """  transfer of electrons from the pocket to the pixels.
+        """transfer of electrons from the pocket to the pixels.
 
         Parameters
         ----------
@@ -93,7 +96,7 @@ class PocketModel():
         """
 
     def get_delta(self, pocket_q, pixel_q):
-        """ net pocket charge transfert
+        """net pocket charge transfert
 
         Parameters
         ----------
@@ -114,13 +117,15 @@ class PocketModel():
 
         # fill
         y = pixel_q / self._nmax
-        to_pocket = np.clip(self._cmax * (1 - x)**self._alpha * y**self._beta,  0., pixel_q)
+        to_pocket = np.clip(
+            self._cmax * (1 - x) ** self._alpha * y**self._beta, 0.0, pixel_q
+        )
 
         delta = from_pocket - to_pocket
         return delta
 
     def get_pocket_and_corr(self, pocket_q, pixel_q):
-        """ scanning function providing corrected pixel and new pocket charge
+        """scanning function providing corrected pixel and new pocket charge
 
         Parameters
         ----------
@@ -142,7 +147,7 @@ class PocketModel():
         return new_pocket, pixel_corr
 
     def apply(self, pixels, init=None, backend=DEFAULT_BACKEND):
-        """ pocket effect correction
+        """pocket effect correction
 
         Parameters
         ----------
@@ -164,13 +169,14 @@ class PocketModel():
         # special case, computation not from python
         if backend == "cpp":
             from ._pocket import _PocketModel as PocketModelCPP
+
             thiscpp = PocketModelCPP(self._alpha, self._cmax, self._beta, self._nmax)
-            return thiscpp.apply(pixels) # 0 is force here.
+            return thiscpp.apply(pixels)  # 0 is force here.
 
         # good format
         pixels = np.atleast_2d(pixels)
         if init is None:
-            init = np.zeros(shape=pixels[:,0].shape)
+            init = np.zeros(shape=pixels[:, 0].shape)
 
         # call current sub-function
         if backend == "jax":
@@ -189,15 +195,14 @@ class PocketModel():
         """ """
         jacobian = self.get_jacobian(test_column, backend=backend)
 
-        i, j = np.meshgrid(np.arange(jacobian.shape[0]),
-                           np.arange(jacobian.shape[1]))
-        i, j = i.flatten(), j.flatten() # flattend
+        i, j = np.meshgrid(np.arange(jacobian.shape[0]), np.arange(jacobian.shape[1]))
+        i, j = i.flatten(), j.flatten()  # flattend
         v = jacobian[i.flatten(), j.flatten()]
-        non_zero_idx = np.abs(v)>1.E-5
+        non_zero_idx = np.abs(v) > 1.0e-5
 
-        jac_sparse = sparse.coo_matrix(( v[non_zero_idx],
-                                         (i[non_zero_idx], j[non_zero_idx])
-                                       ), shape=jacobian.shape)
+        jac_sparse = sparse.coo_matrix(
+            (v[non_zero_idx], (i[non_zero_idx], j[non_zero_idx])), shape=jacobian.shape
+        )
 
         hessian_sparse = jac_sparse.T @ jac_sparse
         return hessian_sparse
@@ -212,24 +217,25 @@ class PocketModel():
     # apply backend supports #
     # ====================== #
     def _scan_apply(self, pixels, init=None):
-        """ docstring, see: self.apply """
+        """docstring, see: self.apply"""
         # with for lax.scan | jax
         # atleast_2d and squeeze is to respect cpp-version behavior
         import jax
-        last_pocket, resbuff = jax.lax.scan(self.get_pocket_and_corr,
-                                                init,
-                                                np.ascontiguousarray(pixels.T))
+
+        last_pocket, resbuff = jax.lax.scan(
+            self.get_pocket_and_corr, init, np.ascontiguousarray(pixels.T)
+        )
         return resbuff.T.squeeze()
 
     def _forloop_apply(self, pixels, init):
-        """ docstring, see: self.apply """
+        """docstring, see: self.apply"""
         # with for loop | numpy
-        pocket = init # for consistency between method
+        pocket = init  # for consistency between method
         resbuff = []
 
         for col in pixels.T:
             pocket, corr = self.get_pocket_and_corr(pocket, col)
-            resbuff.append(corr) # build line by line
+            resbuff.append(corr)  # build line by line
 
         return np.vstack(resbuff).T
 
@@ -246,7 +252,7 @@ class PocketModel():
         .. note:: columns and rows are *not* interchangeable here !
         """
         nrows, ncols = pix.shape
-        pocket = init # for consistency between method
+        pocket = init  # for consistency between method
         pix = np.ascontiguousarray(pix.T)
 
         cmax_inv = 1 / self._cmax
@@ -270,7 +276,7 @@ class PocketModel():
             to_pocket = 1 - tmp
             np.power(to_pocket, self._alpha, out=to_pocket)
             to_pocket *= pix_beta[j] * self._cmax
-            np.clip(to_pocket,  0.,  pix[j], out=to_pocket)
+            np.clip(to_pocket, 0.0, pix[j], out=to_pocket)
 
             delta = from_pocket - to_pocket
 
@@ -281,7 +287,6 @@ class PocketModel():
             np.maximum(pocket, 0, out=pocket)
 
         return pix.T
-
 
 
 def pocket_model_derivatives(model, pix, step=0.01, backend=DEFAULT_BACKEND):
@@ -303,7 +308,7 @@ def pocket_model_derivatives(model, pix, step=0.01, backend=DEFAULT_BACKEND):
     jacobian matrix : array_like
     """
     N = len(pix)
-    pixim = np.resize(pix, (N+1, N))
+    pixim = np.resize(pix, (N + 1, N))
     np.fill_diagonal(pixim, pixim.diagonal() + step)
     vv = model.apply(pixim, backend=backend)
 
@@ -319,6 +324,7 @@ def pocket_model_derivatives(model, pix, step=0.01, backend=DEFAULT_BACKEND):
 #
 # DEPRECATED
 #
+
 
 def correct_1d(model, pix, step=0.01, n_iter=5):
     """Reconstruct the undistorted pixel values (1D version)
@@ -359,17 +365,17 @@ def correct_1d(model, pix, step=0.01, n_iter=5):
 
     default_pix_val = np.median(pix)
 
-    J = pocket_model_derivatives(model, pix) # was 'sky'
-    i,j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
+    J = pocket_model_derivatives(model, pix)  # was 'sky'
+    i, j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
     v = J[i.flatten(), j.flatten()]
-    idx = np.abs(v)>1.E-4 # was 1.E-5
-    i,j = i.flatten(), j.flatten()
+    idx = np.abs(v) > 1.0e-4  # was 1.E-5
+    i, j = i.flatten(), j.flatten()
     JJ = sparse.coo_matrix((v[idx], (i[idx], j[idx])), shape=J.shape)
     H = JJ.T @ JJ
-    f = cholmod.cholesky(H) # , ordering_method='metis')
+    f = cholmod.cholesky(H)  # , ordering_method='metis')
 
     current_state = pix.copy()
-    current_state[-30:] = 0.
+    current_state[-30:] = 0.0
     current_state[0:3] = default_pix_val
     delta_tot = np.zeros_like(current_state)
     start = time.perf_counter()
@@ -381,13 +387,13 @@ def correct_1d(model, pix, step=0.01, n_iter=5):
         delta_tot += delta
         current_state += delta
         # we need to force the overscan to zero
-        current_state[-30:] = 0.
+        current_state[-30:] = 0.0
         if i == 0:
             current_state[:2] = default_pix_val
-        mask[current_state<0] = 1
-        current_state[current_state<0] = default_pix_val
+        mask[current_state < 0] = 1
+        current_state[current_state < 0] = default_pix_val
     stop = time.perf_counter()
-    logging.info(f'time: {stop-start}')
+    logging.info(f"time: {stop - start}")
 
     return current_state, delta_tot, mask
 
@@ -430,17 +436,17 @@ def correct_2d(model, pix, step=0.01, n_iter=4):
 
     line_prof = np.full(pix.shape[0], default_pix_val)
     print(line_prof)
-    J = pocket_model_derivatives(model, line_prof) # was 'sky'
-    i,j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
+    J = pocket_model_derivatives(model, line_prof)  # was 'sky'
+    i, j = np.meshgrid(np.arange(J.shape[0]), np.arange(J.shape[1]))
     v = J[i.flatten(), j.flatten()]
-    idx = np.abs(v)>1.E-5
-    i,j = i.flatten(), j.flatten()
+    idx = np.abs(v) > 1.0e-5
+    i, j = i.flatten(), j.flatten()
     JJ = sparse.coo_matrix((v[idx], (i[idx], j[idx])), shape=J.shape)
     H = JJ.T @ JJ
-    f = cholmod.cholesky(H, ordering_method='best')
+    f = cholmod.cholesky(H, ordering_method="best")
 
     current_state = pix.copy()
-    current_state[:,-30:] = 0.
+    current_state[:, -30:] = 0.0
     current_state[0:2] = default_pix_val
     delta_tot = np.zeros_like(current_state)
     mask = np.zeros_like(current_state).astype(int)
@@ -451,11 +457,11 @@ def correct_2d(model, pix, step=0.01, n_iter=4):
         # delta = f(JJ.T @ res)
         delta_tot += delta
         current_state += delta
-        current_state[:,-30:] = 0.
-        mask[current_state<0] = 1
+        current_state[:, -30:] = 0.0
+        mask[current_state < 0] = 1
         # current_state[:,:3] = default_pix_val
-        current_state[current_state<0.] = default_pix_val
+        current_state[current_state < 0.0] = default_pix_val
     stop = time.perf_counter()
-    print(f'time: {stop-start}')
+    print(f"time: {stop - start}")
 
     return current_state, delta_tot, mask
