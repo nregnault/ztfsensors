@@ -467,18 +467,32 @@ class TestTabulation:
         with pytest.raises(ValueError, match="xmin.*xmax"):
             dummy_model.default_tabulation_grid(n=10, xmin=100.0, xmax=10.0)
 
-    def test_make_eq_func(self, dummy_model):
-        """Test make_eq_func creates a JaxEqFunc."""
+    def test_make_eq_func_default_returns_numpy(self, dummy_model):
+        """Test make_eq_func default (no backend) creates a NumpyEqFunc."""
+        from ztfsensors.pocket.models.base import NumpyEqFunc
+
         params = np.array([0.5, 10.0])
         ccd_temp = 160.0
 
         eq_func = dummy_model.make_eq_func(params, ccd_temp)
 
+        assert isinstance(eq_func, NumpyEqFunc)
+        assert eq_func.x_grid.shape[0] == 100  # default n=100
+
+    def test_make_eq_func_jax_backend_returns_jax(self, dummy_model):
+        """Test make_eq_func with backend='jax' creates a JaxEqFunc."""
+        params = np.array([0.5, 10.0])
+        ccd_temp = 160.0
+
+        eq_func = dummy_model.make_eq_func(params, ccd_temp, backend="jax")
+
         assert isinstance(eq_func, JaxEqFunc)
         assert eq_func.x_grid.shape[0] == 100  # default n=100
 
     def test_make_eq_func_custom_grid(self, dummy_model):
-        """Test make_eq_func with custom tabulation grid."""
+        """Test make_eq_func with custom tabulation grid (numpy backend)."""
+        from ztfsensors.pocket.models.base import NumpyEqFunc
+
         params = np.array([0.5, 10.0])
         ccd_temp = 160.0
         custom_grid = np.linspace(0, 100, 50)
@@ -487,9 +501,10 @@ class TestTabulation:
             params, ccd_temp, tabulation_grid=custom_grid
         )
 
+        assert isinstance(eq_func, NumpyEqFunc)
         assert eq_func.x_grid.shape[0] == 50
-        assert jnp.isclose(eq_func.x_grid[0], 0.0)
-        assert jnp.isclose(eq_func.x_grid[-1], 100.0)
+        assert np.isclose(eq_func.x_grid[0], 0.0)
+        assert np.isclose(eq_func.x_grid[-1], 100.0)
 
     def test_make_eq_func_evaluates_correctly(self, dummy_model):
         """Test that created eq_func evaluates correctly."""

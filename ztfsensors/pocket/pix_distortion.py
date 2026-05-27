@@ -1,9 +1,7 @@
-from configparser import Interpolation
-
 import jax
 import jax.numpy as jnp
+import numpy as np
 from astropy.visualization import ZScaleInterval
-from jax import lax
 
 
 def solve_delta(N_i, T_prev, f_eq, n_iter=3):
@@ -75,6 +73,46 @@ def invert(distorted_pixvals, f_eq):
     Invert the distortion on a full 2D image
     """
     return jax.vmap(invert_line, in_axes=(0, None), out_axes=0)(distorted_pixvals, f_eq)
+
+
+def invert_numpy(distorted_pixvals, f_eq):
+    """Invert the pocket effect on a 2-D image using pure numpy.
+
+    This is the numpy equivalent of :func:`invert`.  It produces the same
+    numerical result without requiring JAX at call time.
+
+    Mathematical note
+    -----------------
+    Inside :func:`invert_line` the ``lax.scan`` state update is::
+
+        T_new[i] = f_eq(d[i])          # no dependence on T_prev
+        delta[i] = T_new[i] - T_prev   # = f_eq(d[i]) - f_eq(d[i-1])
+
+    Because ``T_new[i]`` is independent of the scan carry, the entire scan
+    collapses to a vectorised ``diff``::
+
+        feq   = f_eq(d)                          # apply f_eq to whole image
+        delta = concat([feq[:, :1], diff(feq)])  # leading zero carried → f_eq(d[0])
+        out   = d + delta
+
+    Parameters
+    ----------
+    distorted_pixvals : array_like, shape (nrows, ncols)
+        2-D image with pocket-effect distortion (data + overscan columns).
+        Expected to be in "read" order (amplifier at column 0).
+    f_eq : callable
+        Equilibrium function.  Must accept a 2-D numpy array and return a
+        same-shaped array (e.g. :class:`~ztfsensors.pocket.models.base.NumpyEqFunc`).
+
+    Returns
+    -------
+    np.ndarray, shape (nrows, ncols)
+        Corrected pixel values.
+    """
+    d = np.asarray(distorted_pixvals, dtype=np.float32)
+    feq_vals = f_eq(d)  # shape (nrows, ncols); np.interp handles nD arrays
+    deltas = np.concatenate([feq_vals[:, :1], np.diff(feq_vals, axis=1)], axis=1)
+    return d + deltas
 
 
 def plot_1d(

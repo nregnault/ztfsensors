@@ -4,15 +4,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Directory that ships with the package and holds the bundled eq_db files.
-_BUNDLED_DATA_DIR = Path(__file__).parent / "data"
-_BUNDLED_DB_PREFIX = _BUNDLED_DATA_DIR / "eq_db"
-
 import numpy as np
 import polars as pl
 import yaml
 
-from .models.base import BaseEquilibriumModel, JaxEqFunc
+from .models.base import BaseEquilibriumModel
+
+# Directory that ships with the package and holds the bundled eq_db files.
+_BUNDLED_DATA_DIR = Path(__file__).parent / "data"
+_BUNDLED_DB_PREFIX = _BUNDLED_DATA_DIR / "eq_db"
 
 
 def _model_from_header(header: dict) -> BaseEquilibriumModel:
@@ -323,9 +323,10 @@ class EqFuncDb:
         mjd: float,
         ccd_temp: float,
         tabulation_grid=None,
-    ) -> JaxEqFunc:
+        backend: str = "numpy",
+    ):
         """
-        Create a JIT-compiled equilibrium function for specific observation conditions.
+        Create an equilibrium function for specific observation conditions.
 
         Retrieves the appropriate parameters and instantiates a fast equilibrium
         function at the given CCD temperature.
@@ -343,11 +344,15 @@ class EqFuncDb:
         tabulation_grid : array_like, optional
             Grid of x values for tabulating the function. If None, uses the
             model's default grid.
+        backend : str, optional
+            Passed through to :meth:`BaseEquilibriumModel.make_eq_func`.
+            ``'numpy'`` (default) returns a :class:`NumpyEqFunc`;
+            ``'jax'`` returns a :class:`JaxEqFunc`.
 
         Returns
         -------
-        JaxEqFunc
-            JIT-compiled equilibrium function ready for fast evaluation.
+        NumpyEqFunc or JaxEqFunc
+            Equilibrium function ready for fast evaluation.
 
         Raises
         ------
@@ -361,6 +366,7 @@ class EqFuncDb:
             params=params,
             ccd_temp=ccd_temp,
             tabulation_grid=tabulation_grid,
+            backend=backend,
         )
 
     # ------------------------------------------------------------------

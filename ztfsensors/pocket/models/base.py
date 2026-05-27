@@ -79,6 +79,49 @@ class JaxEqFunc(eqx.Module):
         return jnp.interp(x_clipped, self.x_grid, self.y_grid)
 
 
+class NumpyEqFunc:
+    """Pure-numpy equilibrium function via linear interpolation on a tabulated grid.
+
+    Drop-in replacement for :class:`JaxEqFunc` for the inference path.
+    No JAX dependency at call time.
+
+    Attributes
+    ----------
+    x_grid : np.ndarray
+        Grid of x values (sky levels) for tabulation.
+    y_grid : np.ndarray
+        Corresponding y values (overscan signal) at each grid point.
+    x_max : float
+        x value at the maximum of y_grid (used for clipping, same as JaxEqFunc).
+    """
+
+    def __init__(self, x_grid, y_grid):
+        self.x_grid = np.asarray(x_grid, dtype=np.float32)
+        self.y_grid = np.asarray(y_grid, dtype=np.float32)
+        self.x_max = self.x_grid[np.argmax(self.y_grid)]
+
+    def __call__(self, x):
+        """Evaluate the equilibrium function at x (any shape).
+
+        Values beyond x_max are clipped identically to JaxEqFunc.
+
+        Parameters
+        ----------
+        x : array_like
+            Sky level value(s).  np.interp handles any shape natively.
+
+        Returns
+        -------
+        np.ndarray
+            Interpolated overscan signal value(s), same shape as x.
+        """
+        x_arr = np.asarray(x, dtype=np.float32)
+        x_clipped = np.clip(x_arr, self.x_grid[0], self.x_max)
+        # np.interp always returns float64 regardless of input dtypes; cast back
+        # to float32 to match JaxEqFunc's behaviour and keep invert_numpy in f32.
+        return np.interp(x_clipped, self.x_grid, self.y_grid).astype(np.float32)
+
+
 class BaseEquilibriumModel(ABC):
     """
     Abstract base class for equilibrium models.
@@ -404,9 +447,11 @@ class BaseEquilibriumModel(ABC):
 
         return np.geomspace(xmin, xmax, n)
 
-    def make_eq_func(self, params, ccd_temp: float, tabulation_grid=None):
+    def make_eq_func(
+        self, params, ccd_temp: float, tabulation_grid=None, backend: str = "numpy"
+    ):
         """
-        Create a JIT-compiled equilibrium function at a specific temperature.
+        Create an equilibrium function at a specific temperature.
 
         Tabulates the model on a grid and returns a fast interpolating function.
 
@@ -418,11 +463,15 @@ class BaseEquilibriumModel(ABC):
             CCD temperature at which to evaluate the function.
         tabulation_grid : array_like, optional
             Grid of x values for tabulation. If None, uses default_tabulation_grid().
+        backend : str, optional
+            Which backend to use for the returned callable.
+            ``'numpy'`` (default) returns a :class:`NumpyEqFunc` (no JAX at call time).
+            ``'jax'`` returns a :class:`JaxEqFunc` (JIT-compiled via equinox).
 
         Returns
         -------
-        JaxEqFunc
-            JIT-compiled equilibrium function ready for evaluation.
+        NumpyEqFunc or JaxEqFunc
+            Equilibrium function ready for evaluation.
 
         Raises
         ------
@@ -438,7 +487,12 @@ class BaseEquilibriumModel(ABC):
 
         y_grid = self.evaluate(x=tabulation_grid, ccd_temp=ccd_temp, params=params)
 
-        return JaxEqFunc(
-            x_grid=jnp.asarray(tabulation_grid, dtype=jnp.float32),
-            y_grid=jnp.asarray(y_grid, dtype=jnp.float32),
-        )
+        if backend == "numpy":
+            return NumpyEqFunc(x_grid=tabulation_grid, y_grid=y_grid)
+        elif backend == "jax":
+            return JaxEqFunc(
+                x_grid=jnp.asarray(tabulation_grid, dtype=jnp.float32),
+                y_grid=jnp.asarray(y_grid, dtype=jnp.float32),
+            )
+        else:
+            raise ValueError(f"Unknown backend {backend!r}: expected 'numpy' or 'jax'.")
